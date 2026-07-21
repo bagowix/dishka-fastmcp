@@ -25,6 +25,12 @@ Python 3.11+, `dishka>=1.10.1`, `fastmcp>=3.2.4,<4`.
   session-lifetime scope cannot be finalized deterministically.
 - **Close the root container on shutdown** to finalize `Scope.APP` providers:
   pass `dishka_lifespan(container)` to `FastMCP(lifespan=...)`.
+- **Sync `Scope.APP` dependencies must be thread-safe.** FastMCP may use different
+  worker threads, and APP cleanup runs from the server lifespan. Put thread-affine
+  resources in `Scope.REQUEST`, which is created and finalized in one worker.
+- **`task=True` handlers are not supported.** They run after the request (and its
+  REQUEST scope) is over, so injection there raises `DishkaFastMCPError`. Resolve
+  dependencies inside the request and pass plain values to the task.
 
 ## API
 

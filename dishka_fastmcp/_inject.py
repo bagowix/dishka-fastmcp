@@ -9,9 +9,14 @@ from collections.abc import Awaitable, Callable
 from inspect import isasyncgenfunction, iscoroutinefunction
 from typing import Any, ParamSpec, TypeVar, overload
 
+from dishka import Scope
 from dishka.integrations.base import wrap_injection
 
-from dishka_fastmcp._container import get_async_container, get_sync_container
+from dishka_fastmcp._container import (
+    get_async_container,
+    get_sync_container,
+    provide_context,
+)
 
 __all__ = ('inject',)
 
@@ -22,22 +27,33 @@ T = TypeVar('T')
 def inject_async(
     func: Callable[P, Awaitable[T]],
 ) -> Callable[P, Awaitable[T]]:
-    """Inject dependencies into an async handler."""
+    """Inject dependencies into an async handler, opening the REQUEST scope."""
     return wrap_injection(
         func=func,
         container_getter=get_async_container,
         is_async=True,
         remove_depends=True,
+        manage_scope=True,
+        scope=Scope.REQUEST,
+        provide_context=provide_context,
     )
 
 
 def inject_sync(func: Callable[P, T]) -> Callable[P, T]:
-    """Inject dependencies into a sync handler."""
+    """Inject dependencies into a sync handler, opening the REQUEST scope.
+
+    ``manage_scope`` makes the scope open and finalize inside the call, so a sync
+    handler run in a FastMCP worker thread creates and closes its REQUEST-scoped
+    dependencies in that same thread.
+    """
     return wrap_injection(
         func=func,
         container_getter=get_sync_container,
         is_async=False,
         remove_depends=True,
+        manage_scope=True,
+        scope=Scope.REQUEST,
+        provide_context=provide_context,
     )
 
 

@@ -42,13 +42,18 @@ async def test_async_resource_injects_dep_and_uri_params() -> None:
     async def item(
         name: str,
         app: FromDishka[AppDep],
+        req: FromDishka[ReqDep],
         params: FromDishka[ReadResourceRequestParams],
     ) -> str:
-        return f'{app}:{name}:{params.uri}'
+        return f'{app}:{req}:{name}:{params.uri}'
 
     try:
+        templates = await mcp.list_resource_templates()
+        assert templates[0].uri_template == 'data://items/{name}'
+
         result = await mcp.read_resource('data://items/one')
-        assert result.contents[0].content == 'APP:one:data://items/one'
+        assert result.contents[0].content == 'APP:REQ:one:data://items/one'
+        assert provider.req_released
     finally:
         await container.close()
 
@@ -66,6 +71,9 @@ async def test_async_prompt_injects_dep() -> None:
         return f'{app}:{name}'
 
     try:
+        prompts = await mcp.list_prompts()
+        assert [argument.name for argument in prompts[0].arguments or []] == ['name']
+
         result = await mcp.render_prompt('greet', {'name': 'two'})
         message = result.messages[0].content
         assert isinstance(message, TextContent)

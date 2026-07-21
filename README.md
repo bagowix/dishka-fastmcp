@@ -18,7 +18,7 @@ one container with the rest of your application.
 from dishka import Provider, Scope, make_async_container, provide
 from fastmcp import FastMCP
 
-from dishka_fastmcp import FromDishka, inject, setup_dishka
+from dishka_fastmcp import FromDishka, dishka_lifespan, inject, setup_dishka
 
 
 class Catalog:
@@ -32,8 +32,8 @@ class AppProvider(Provider):
     catalog = provide(Catalog, scope=Scope.REQUEST)
 
 
-mcp = FastMCP('shop')
 container = make_async_container(AppProvider())
+mcp = FastMCP('shop', lifespan=dishka_lifespan(container))
 setup_dishka(container, mcp)
 
 
@@ -67,17 +67,17 @@ Registration time and execution time are separate concerns:
   stripping every `FromDishka` parameter, so the schema the LLM sees contains
   only the real client-facing arguments. **Order matters** — `@inject` must be
   the inner decorator.
-- **`setup_dishka` registers a middleware** that opens a `Scope.REQUEST`
-  container around each tool call, resource read and prompt render, and exposes
-  it to `@inject` through a `ContextVar`. The scope is entered and finalized per
-  request, so generator-provider cleanup runs exactly when you expect.
+- **`setup_dishka` registers a middleware** that publishes the root container
+  and current FastMCP objects through `ContextVar`s. `@inject` then opens and
+  finalizes `Scope.REQUEST` around the handler in the thread where it executes.
+  This keeps sync dependency setup, use and cleanup in the same worker thread.
 
 ## Scopes
 
 | Scope | Boundary | Lifetime |
 |-------|----------|----------|
 | `Scope.APP` | The whole server | Created by `make_async_container`; **you** close it on shutdown (see below) |
-| `Scope.REQUEST` | One tool call / resource read / prompt render | Opened and finalized by the middleware per request |
+| `Scope.REQUEST` | One tool call / resource read / prompt render | Opened and finalized by `@inject` around the handler |
 
 `Scope.SESSION` is **intentionally not supported.** FastMCP's middleware exposes
 a session-start hook (`on_initialize`) but no session-teardown hook, so a
@@ -88,22 +88,27 @@ hook, SESSION support will follow.
 
 ### Closing the container
 
-`setup_dishka` registers the middleware but does not own the server lifecycle,
-so it does not close the root container. If any `Scope.APP` provider finalizes a
-resource (a database pool, an HTTP client), close the container on shutdown. Pass
-`dishka_lifespan(container)` to the FastMCP lifespan — it closes the container
-(async or sync) when the server stops:
+`setup_dishka` registers the middleware but does not own the server lifecycle, so
+it does not close the root container. `dishka_lifespan(container)` — used in the
+example above — closes it (async or sync) when the server stops, finalizing every
+`Scope.APP` provider. If you already have your own lifespan, close the container
+in its shutdown path instead (`await container.close()`, or `container.close()`
+for a sync container).
 
-```python
-from dishka_fastmcp import dishka_lifespan
+FastMCP may execute sync handlers on different worker threads. Consequently,
+`Scope.APP` dependencies in a sync container must be thread-safe and their
+cleanup must not require the thread that created them. Put thread-affine resources
+such as `sqlite3.Connection` in `Scope.REQUEST`, where dishka-fastmcp guarantees
+creation, use and finalization in one worker thread.
 
-container = make_async_container(AppProvider())
-mcp = FastMCP('shop', lifespan=dishka_lifespan(container))
-setup_dishka(container, mcp)
-```
+### Background tasks
 
-If you already have a lifespan, close the container in its shutdown path
-yourself (`await container.close()`, or `container.close()` for a sync container).
+FastMCP's `task=True` handlers are **not supported**. The tool call returns as
+soon as the work is queued, so the request — and with it the REQUEST scope — is
+already over by the time the worker runs the handler. Injection there fails with
+`DishkaFastMCPError`. Keep `FromDishka` handlers request-bound; if you need
+background work, resolve dependencies inside the request and pass plain values
+to the task.
 
 ## Resources and prompts
 
