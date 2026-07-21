@@ -21,31 +21,33 @@ from fastmcp import FastMCP
 from dishka_fastmcp import FromDishka, inject, setup_dishka
 
 
-class Greeter:
-    def greet(self, name: str) -> str:
-        return f'Hello, {name}!'
+class Catalog:
+    _prices: dict[str, int] = {'book': 12, 'pen': 2}
+
+    def price(self, item: str) -> int:
+        return self._prices.get(item, 0)
 
 
 class AppProvider(Provider):
-    greeter = provide(Greeter, scope=Scope.REQUEST)
+    catalog = provide(Catalog, scope=Scope.REQUEST)
 
 
-mcp = FastMCP('demo')
+mcp = FastMCP('shop')
 container = make_async_container(AppProvider())
 setup_dishka(container, mcp)
 
 
 @mcp.tool
 @inject
-async def greet(name: str, greeter: FromDishka[Greeter]) -> str:
-    return greeter.greet(name)
+async def get_price(item: str, catalog: FromDishka[Catalog]) -> int:
+    return catalog.price(item)
 
 
 if __name__ == '__main__':
     mcp.run()
 ```
 
-The client sees a tool that takes only `name` — `greeter` is injected at call
+The client sees a tool that takes only `item` — `catalog` is injected at call
 time and never appears in the schema.
 
 ## Install
@@ -54,7 +56,7 @@ time and never appears in the schema.
 uv add dishka-fastmcp        # or: pip install dishka-fastmcp
 ```
 
-Requires Python 3.11+, `dishka>=1.6`, `fastmcp>=3,<4`.
+Requires Python 3.11+, `dishka>=1.10.1`, `fastmcp>=3.2.4,<4`.
 
 ## How it works
 
@@ -74,7 +76,7 @@ Registration time and execution time are separate concerns:
 
 | Scope | Boundary | Lifetime |
 |-------|----------|----------|
-| `Scope.APP` | The whole server | Created by `make_async_container`, closed on shutdown |
+| `Scope.APP` | The whole server | Created by `make_async_container`; **you** close it on shutdown (see below) |
 | `Scope.REQUEST` | One tool call / resource read / prompt render | Opened and finalized by the middleware per request |
 
 `Scope.SESSION` is **intentionally not supported.** FastMCP's middleware exposes
@@ -83,6 +85,25 @@ session-lifetime container could never be finalized deterministically. Rather
 than ship a SESSION scope that silently behaves like REQUEST, dishka-fastmcp
 offers only the two scopes it can honor. If FastMCP adds a session-teardown
 hook, SESSION support will follow.
+
+### Closing the container
+
+`setup_dishka` registers the middleware but does not own the server lifecycle,
+so it does not close the root container. If any `Scope.APP` provider finalizes a
+resource (a database pool, an HTTP client), close the container on shutdown. Pass
+`dishka_lifespan(container)` to the FastMCP lifespan — it closes the container
+(async or sync) when the server stops:
+
+```python
+from dishka_fastmcp import dishka_lifespan
+
+container = make_async_container(AppProvider())
+mcp = FastMCP('shop', lifespan=dishka_lifespan(container))
+setup_dishka(container, mcp)
+```
+
+If you already have a lifespan, close the container in its shutdown path
+yourself (`await container.close()`, or `container.close()` for a sync container).
 
 ## Resources and prompts
 
