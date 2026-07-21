@@ -36,6 +36,14 @@ prompts.
   session-teardown hook, so a `Scope.SESSION` container could not be finalized
   deterministically; it is deliberately omitted rather than shipped as a scope
   that silently behaves like `REQUEST`.
+- The REQUEST scope is entered and finalized by `@inject`, inside the thread that
+  runs the handler. FastMCP executes sync tools in a worker thread, so a scope
+  managed on the event loop would create a thread-affine dependency (such as a
+  `sqlite3` connection) in the worker and finalize it on the loop, raising on
+  cleanup. Sync handlers therefore create, use and release their REQUEST-scoped
+  dependencies in one thread.
+- Handlers registered with FastMCP's `task=True` are not supported: they run after
+  the request has finished, so no container is in scope for them.
 
 [Unreleased]: https://github.com/bagowix/dishka-fastmcp/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/bagowix/dishka-fastmcp/releases/tag/v1.0.0

@@ -22,6 +22,16 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
 
+      # The package version is static in dishka_fastmcp/version.py, so a tag that
+      # disagrees with it would publish the wrong build (or collide on PyPI).
+      - name: Verify tag matches package version
+        run: |
+          version=$(uv run python -c 'from dishka_fastmcp.version import VERSION; print(VERSION)')
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match package version $version (expected v$version)"
+            exit 1
+          fi
+
       - name: Tests
         run: uv run pytest
 

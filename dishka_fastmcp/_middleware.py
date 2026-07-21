@@ -1,14 +1,17 @@
-"""Middleware that opens a dishka REQUEST scope around each MCP operation.
+"""Middleware that publishes the container and context for each MCP operation.
 
-The middleware is the only place that sees request boundaries for tools,
-resources and prompts alike, so scopes are opened here — never by @inject.
-``Scope.SESSION`` is intentionally skipped: FastMCP has no session-teardown
-hook, so a session-lifetime scope cannot be finalized deterministically.
+The middleware runs for tools, resources and prompts alike and stashes the root
+container plus the operation's FastMCP objects in ContextVars. It does NOT open
+the dishka scope — ``@inject`` does, via ``wrap_injection(manage_scope=True)``, so
+the REQUEST scope is entered and finalized in the thread where the handler runs
+(critical for sync tools offloaded to a worker thread). ``Scope.SESSION`` is
+intentionally unsupported: FastMCP has no session-teardown hook, so a
+session-lifetime scope cannot be finalized deterministically.
 """
 
 from typing import Any, TypeVar
 
-from dishka import AsyncContainer, Container, Scope
+from dishka import AsyncContainer, Container
 from fastmcp import FastMCP
 from fastmcp.prompts import PromptResult
 from fastmcp.resources import ResourceResult
@@ -17,7 +20,7 @@ from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
 from fastmcp.tools import ToolResult
 from mcp import types as mt
 
-from dishka_fastmcp._container import REQUEST_CONTAINER
+from dishka_fastmcp._container import CONTEXT_DATA, ROOT_CONTAINER
 
 __all__ = ('DishkaMiddleware',)
 
@@ -26,7 +29,7 @@ ResultT = TypeVar('ResultT')
 
 
 class DishkaMiddleware(Middleware):
-    """Opens a REQUEST-scoped container per call and exposes it via ContextVar."""
+    """Publishes the root container and per-operation context via ContextVars."""
 
     def __init__(self, container: AsyncContainer | Container) -> None:
         self._container = container
@@ -57,26 +60,13 @@ class DishkaMiddleware(Middleware):
         context: MiddlewareContext[MessageT],
         call_next: CallNext[MessageT, ResultT],
     ) -> ResultT:
-        data = self._context_data(context)
-        container = self._container
-        if isinstance(container, AsyncContainer):
-            async with container(context=data, scope=Scope.REQUEST) as request_container:
-                return await self._call(request_container, context, call_next)
-        else:
-            with container(context=data, scope=Scope.REQUEST) as request_container:
-                return await self._call(request_container, context, call_next)
-
-    @staticmethod
-    async def _call(
-        request_container: AsyncContainer | Container,
-        context: MiddlewareContext[MessageT],
-        call_next: CallNext[MessageT, ResultT],
-    ) -> ResultT:
-        token = REQUEST_CONTAINER.set(request_container)
+        container_token = ROOT_CONTAINER.set(self._container)
+        context_token = CONTEXT_DATA.set(self._context_data(context))
         try:
             return await call_next(context)
         finally:
-            REQUEST_CONTAINER.reset(token)
+            ROOT_CONTAINER.reset(container_token)
+            CONTEXT_DATA.reset(context_token)
 
     @staticmethod
     def _context_data(context: MiddlewareContext[MessageT]) -> dict[Any, Any]:

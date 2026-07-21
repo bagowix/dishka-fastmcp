@@ -18,6 +18,7 @@ from fastmcp.server.context import Context
 from mcp.types import TextContent
 
 from dishka_fastmcp import FromDishka, inject, setup_dishka
+from dishka_fastmcp._container import provide_context
 from dishka_fastmcp._middleware import DishkaMiddleware
 
 AppDep = NewType('AppDep', str)
@@ -144,6 +145,10 @@ async def test_sync_tool_with_async_container_raises() -> None:
             await mcp.call_tool('work')
     finally:
         await container.close()
+
+
+def test_provide_context_is_empty_outside_an_operation() -> None:
+    assert provide_context((), {}) == {}
 
 
 def test_context_data_omits_context_without_fastmcp_context() -> None:

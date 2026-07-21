@@ -101,18 +101,18 @@ ban-relative-imports = "all"
   "SLF001",  # tests exercise internal helpers directly
 ]
 
-# Type checkers cover the package, not the whole test suite: strict-checking
-# decorator-registered test handlers only fights reportUnusedFunction without
-# catching real bugs.
+# Type checkers cover the package and the typing-surface assertions, not the
+# whole test suite: strict-checking decorator-registered test handlers only
+# fights reportUnusedFunction without catching real bugs.
 [tool.mypy]
 python_version = "3.11"
 strict = true
 warn_unreachable = true
 show_error_codes = true
-files = ["dishka_fastmcp"]
+files = ["dishka_fastmcp", "tests/typing_surface.py"]
 
 [tool.pyright]
-include = ["dishka_fastmcp"]
+include = ["dishka_fastmcp", "tests/typing_surface.py"]
 pythonVersion = "3.11"
 typeCheckingMode = "strict"
 
