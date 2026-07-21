@@ -23,6 +23,8 @@ Python 3.11+, `dishka>=1.10.1`, `fastmcp>=3.2.4,<4`.
   call / resource read / prompt render, finalized when it ends). `Scope.SESSION`
   is intentionally unsupported: FastMCP has no session-teardown hook, so a
   session-lifetime scope cannot be finalized deterministically.
+- **Close the root container on shutdown** to finalize `Scope.APP` providers:
+  pass `dishka_lifespan(container)` to `FastMCP(lifespan=...)`.
 
 ## API
 
@@ -33,6 +35,8 @@ Python 3.11+, `dishka>=1.10.1`, `fastmcp>=3.2.4,<4`.
   `Context`, the `FastMCP` server, or the raw request params
   (`CallToolRequestParams` / `ReadResourceRequestParams` / `GetPromptRequestParams`)
   via dishka's `from_context`.
+- `dishka_lifespan(container)` — build a `FastMCP` lifespan that closes the
+  container (async or sync) on shutdown.
 - `DishkaFastMCPError` — raised when the container is missing or the wrong kind.
 
 ## Usage
@@ -44,24 +48,26 @@ from fastmcp import FastMCP
 from dishka_fastmcp import FromDishka, inject, setup_dishka
 
 
-class Greeter:
-    def greet(self, name: str) -> str:
-        return f'Hello, {name}!'
+class Catalog:
+    _prices = {'book': 12, 'pen': 2}
+
+    def price(self, item: str) -> int:
+        return self._prices.get(item, 0)
 
 
 class AppProvider(Provider):
-    greeter = provide(Greeter, scope=Scope.REQUEST)
+    catalog = provide(Catalog, scope=Scope.REQUEST)
 
 
-mcp = FastMCP('demo')
+mcp = FastMCP('shop')
 container = make_async_container(AppProvider())
 setup_dishka(container, mcp)
 
 
 @mcp.tool
 @inject
-async def greet(name: str, greeter: FromDishka[Greeter]) -> str:
-    return greeter.greet(name)  # client sees only `name` in the schema
+async def get_price(item: str, catalog: FromDishka[Catalog]) -> int:
+    return catalog.price(item)  # client sees only `item` in the schema
 ```
 
 ## Links

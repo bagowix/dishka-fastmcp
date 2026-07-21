@@ -24,6 +24,9 @@ prompts.
   dependencies via `from_context`: the `Context`, the `FastMCP` server, and the
   raw request params (`CallToolRequestParams`, `ReadResourceRequestParams`,
   `GetPromptRequestParams`).
+- `dishka_lifespan(container)` — builds a FastMCP lifespan that closes the root
+  container on shutdown, finalizing every `Scope.APP` provider. Works with async
+  and sync containers.
 - `FromDishka` re-exported for a single import site.
 - Full typing surface (`py.typed`), checked by mypy and pyright in strict mode.
 
