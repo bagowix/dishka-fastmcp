@@ -1,8 +1,12 @@
 # dishka-fastmcp
 
+[![CI](https://github.com/bagowix/dishka-fastmcp/actions/workflows/ci.yml/badge.svg)](https://github.com/bagowix/dishka-fastmcp/actions/workflows/ci.yml)
+[![Coverage](https://raw.githubusercontent.com/bagowix/dishka-fastmcp/python-coverage-comment-action-data/badge.svg)](https://github.com/bagowix/dishka-fastmcp/tree/python-coverage-comment-action-data)
 [![PyPI](https://img.shields.io/pypi/v/dishka-fastmcp.svg)](https://pypi.org/project/dishka-fastmcp/)
-[![Python](https://img.shields.io/pypi/pyversions/dishka-fastmcp.svg)](https://pypi.org/project/dishka-fastmcp/)
+[![Downloads](https://img.shields.io/pypi/dm/dishka-fastmcp.svg)](https://pypi.org/project/dishka-fastmcp/)
+[![Python versions](https://img.shields.io/pypi/pyversions/dishka-fastmcp.svg)](https://pypi.org/project/dishka-fastmcp/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![llms.txt](https://img.shields.io/badge/-llms.txt-brightgreen)](docs/llms.txt)
 
 [dishka](https://github.com/reagento/dishka) IoC container integration for
 [FastMCP](https://github.com/jlowin/fastmcp). Declare dependencies as
