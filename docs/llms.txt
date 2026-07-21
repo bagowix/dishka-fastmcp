@@ -1,0 +1,73 @@
+# dishka-fastmcp
+
+> dishka IoC container integration for FastMCP. Declare dependencies as
+> `FromDishka[Service]` in MCP tools, resources and prompts; dishka resolves them
+> per request with real scopes, finalization and modular providers, sharing one
+> container with the rest of the application.
+
+Install: `uv add dishka-fastmcp` (or `pip install dishka-fastmcp`). Requires
+Python 3.11+, `dishka>=1.10.1`, `fastmcp>=3.2.4,<4`.
+
+## Rules that matter
+
+- **Put `@inject` BELOW the FastMCP decorator** (`@mcp.tool` / `@mcp.resource` /
+  `@mcp.prompt`). `@inject` rewrites the signature to strip `FromDishka`
+  parameters; FastMCP then builds the JSON schema from the cleaned signature, so
+  injected services never appear as tool arguments. Wrong order leaks the service
+  into the schema.
+- **Call `setup_dishka(container, mcp)` once** before running the server.
+- **Async handlers need `make_async_container`; sync handlers need
+  `make_container`** (sync tools run in a FastMCP worker thread). Mixing the two
+  raises `DishkaFastMCPError`.
+- **Scopes: `Scope.APP`** (server lifetime) and **`Scope.REQUEST`** (one tool
+  call / resource read / prompt render, finalized when it ends). `Scope.SESSION`
+  is intentionally unsupported: FastMCP has no session-teardown hook, so a
+  session-lifetime scope cannot be finalized deterministically.
+
+## API
+
+- `setup_dishka(container, app)` — register the dishka middleware on a `FastMCP` app.
+- `inject` — decorator binding `FromDishka[...]` parameters; auto-detects sync vs async.
+- `FromDishka[T]` — mark a parameter for injection (re-exported from dishka).
+- `FastMCPProvider()` — add to the container to inject the current request's
+  `Context`, the `FastMCP` server, or the raw request params
+  (`CallToolRequestParams` / `ReadResourceRequestParams` / `GetPromptRequestParams`)
+  via dishka's `from_context`.
+- `DishkaFastMCPError` — raised when the container is missing or the wrong kind.
+
+## Usage
+
+```python
+from dishka import Provider, Scope, make_async_container, provide
+from fastmcp import FastMCP
+
+from dishka_fastmcp import FromDishka, inject, setup_dishka
+
+
+class Greeter:
+    def greet(self, name: str) -> str:
+        return f'Hello, {name}!'
+
+
+class AppProvider(Provider):
+    greeter = provide(Greeter, scope=Scope.REQUEST)
+
+
+mcp = FastMCP('demo')
+container = make_async_container(AppProvider())
+setup_dishka(container, mcp)
+
+
+@mcp.tool
+@inject
+async def greet(name: str, greeter: FromDishka[Greeter]) -> str:
+    return greeter.greet(name)  # client sees only `name` in the schema
+```
+
+## Links
+
+- [README](https://github.com/bagowix/dishka-fastmcp/blob/main/README.md)
+- [Source](https://github.com/bagowix/dishka-fastmcp)
+- [PyPI](https://pypi.org/project/dishka-fastmcp/)
+- [dishka documentation](https://dishka.readthedocs.io/)
+- [FastMCP documentation](https://gofastmcp.com/)
