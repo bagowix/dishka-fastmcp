@@ -1,0 +1,158 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dishka-fastmcp"
+dynamic = ["version"]
+description = "dishka IoC container integration for FastMCP: scopes, finalization and providers for MCP tools, resources and prompts."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "bagowix", email = "galushko355@gmail.com" },
+]
+keywords = ["dishka", "fastmcp", "mcp", "dependency-injection", "ioc", "di"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Framework :: AsyncIO",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Typing :: Typed",
+]
+dependencies = [
+    "dishka>=1.10.1",
+    "fastmcp>=3.2.4,<4",
+]
+
+[project.urls]
+Homepage = "https://github.com/bagowix/dishka-fastmcp"
+Repository = "https://github.com/bagowix/dishka-fastmcp"
+Changelog = "https://github.com/bagowix/dishka-fastmcp/blob/main/CHANGELOG.md"
+Issues = "https://github.com/bagowix/dishka-fastmcp/issues"
+
+[tool.hatch.version]
+path = "dishka_fastmcp/version.py"
+
+[[tool.uv.index]]
+url = "https://pypi.org/simple"
+default = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["dishka_fastmcp"]
+
+[tool.ruff]
+src = ["dishka_fastmcp", "tests"]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.format]
+quote-style = "single"
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+  "COM812",
+  "ISC001",
+  "TRY003",
+  "EM101",
+  "EM102",
+  "N818",
+  "RUF001",
+  "RUF002",
+  "RUF003",
+  "TD002",
+  "TD003",
+  "FIX002",
+  "D105",
+  "D107",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.isort]
+known-first-party = ["dishka_fastmcp"]
+
+[tool.ruff.lint.flake8-quotes]
+inline-quotes = "single"
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"typing.List".msg = "Use list[] instead."
+"typing.Dict".msg = "Use dict[] instead."
+"typing.Set".msg = "Use set[] instead."
+"typing.Optional".msg = "Use X | None instead."
+"typing.Union".msg = "Use X | Y instead."
+"typing.Type".msg = "Use type[] instead."
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+  "S101",    # asserts are the point of tests
+  "PLR2004", # magic values are fine in tests
+  "D",       # test names are the documentation
+  "INP001",  # tests is not an importable package
+  "SLF001",  # tests exercise internal helpers directly
+]
+
+# Type checkers cover the package, not the whole test suite: strict-checking
+# decorator-registered test handlers only fights reportUnusedFunction without
+# catching real bugs.
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unreachable = true
+show_error_codes = true
+files = ["dishka_fastmcp"]
+
+[tool.pyright]
+include = ["dishka_fastmcp"]
+pythonVersion = "3.11"
+typeCheckingMode = "strict"
+
+[tool.pymarkdown]
+plugins.MD013.enabled = false   # line-length limit disabled
+plugins.MD029.style = "ordered" # consistent ordered list numbering
+plugins.MD033.enabled = false   # allow inline HTML
+plugins.MD046.enabled = false   # fenced blocks inside lists trip the style check
+plugins.MD041.enabled = false   # do not require an H1 at the top of every file
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+branch = true
+source = ["dishka_fastmcp"]
+relative_files = true
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+  "pragma: no cover",
+  "if TYPE_CHECKING:",
+  "@overload",
+  "@abstractmethod",
+  "raise NotImplementedError",
+  "^\\s*\\.\\.\\.\\s*$",
+]
+fail_under = 100
+
+[dependency-groups]
+dev = [
+    "mypy>=2.1.0",
+    "prek>=0.4.5",
+    "pyright>=1.1.411",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.15.18",
+]

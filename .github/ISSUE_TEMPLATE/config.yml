@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/bagowix/dishka-fastmcp/security/advisories/new
+    about: Please report security issues privately, not as public issues.
+  - name: dishka documentation
+    url: https://dishka.readthedocs.io/
+    about: Scopes, providers and the container API.
+  - name: FastMCP documentation
+    url: https://gofastmcp.com/
+    about: Tools, resources, prompts and middleware.
