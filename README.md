@@ -67,17 +67,17 @@ Registration time and execution time are separate concerns:
   stripping every `FromDishka` parameter, so the schema the LLM sees contains
   only the real client-facing arguments. **Order matters** — `@inject` must be
   the inner decorator.
-- **`setup_dishka` registers a middleware** that opens a `Scope.REQUEST`
-  container around each tool call, resource read and prompt render, and exposes
-  it to `@inject` through a `ContextVar`. The scope is entered and finalized per
-  request, so generator-provider cleanup runs exactly when you expect.
+- **`setup_dishka` registers a middleware** that publishes the root container
+  and current FastMCP objects through `ContextVar`s. `@inject` then opens and
+  finalizes `Scope.REQUEST` around the handler in the thread where it executes.
+  This keeps sync dependency setup, use and cleanup in the same worker thread.
 
 ## Scopes
 
 | Scope | Boundary | Lifetime |
 |-------|----------|----------|
 | `Scope.APP` | The whole server | Created by `make_async_container`; **you** close it on shutdown (see below) |
-| `Scope.REQUEST` | One tool call / resource read / prompt render | Opened and finalized by the middleware per request |
+| `Scope.REQUEST` | One tool call / resource read / prompt render | Opened and finalized by `@inject` around the handler |
 
 `Scope.SESSION` is **intentionally not supported.** FastMCP's middleware exposes
 a session-start hook (`on_initialize`) but no session-teardown hook, so a
@@ -94,6 +94,12 @@ example above — closes it (async or sync) when the server stops, finalizing ev
 `Scope.APP` provider. If you already have your own lifespan, close the container
 in its shutdown path instead (`await container.close()`, or `container.close()`
 for a sync container).
+
+FastMCP may execute sync handlers on different worker threads. Consequently,
+`Scope.APP` dependencies in a sync container must be thread-safe and their
+cleanup must not require the thread that created them. Put thread-affine resources
+such as `sqlite3.Connection` in `Scope.REQUEST`, where dishka-fastmcp guarantees
+creation, use and finalization in one worker thread.
 
 ### Background tasks
 

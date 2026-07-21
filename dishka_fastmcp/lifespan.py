@@ -23,7 +23,9 @@ def dishka_lifespan(
 
     Pass the result to ``FastMCP(lifespan=...)``. On shutdown the root container
     is closed, finalizing every ``Scope.APP`` provider. Works with both an
-    ``AsyncContainer`` and a sync ``Container``.
+    ``AsyncContainer`` and a sync ``Container``. APP-scoped dependencies in a
+    sync container must be thread-safe and have thread-independent cleanup;
+    thread-affine resources belong in ``Scope.REQUEST``.
     """
 
     @asynccontextmanager

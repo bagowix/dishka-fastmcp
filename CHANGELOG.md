@@ -13,10 +13,10 @@ prompts.
 
 ### Added
 
-- `setup_dishka(container, mcp)` — registers the middleware that opens a
-  `Scope.REQUEST` container around every tool call, resource read and prompt
-  render, and finalizes it when the operation ends. Accepts an `AsyncContainer`
-  for async handlers or a `Container` for sync handlers.
+- `setup_dishka(container, mcp)` — registers the middleware that publishes the
+  root container and current FastMCP objects for every tool call, resource read
+  and prompt render. Accepts an `AsyncContainer` for async handlers or a
+  `Container` for sync handlers; `@inject` owns the REQUEST scope.
 - `@inject` — resolves `FromDishka[...]` parameters and strips them from the
   signature, so they never leak into the tool schema. Auto-detects sync vs async
   handlers. Must be placed below the FastMCP decorator.
@@ -42,6 +42,10 @@ prompts.
   `sqlite3` connection) in the worker and finalize it on the loop, raising on
   cleanup. Sync handlers therefore create, use and release their REQUEST-scoped
   dependencies in one thread.
+- APP-scoped dependencies in a sync container must be thread-safe and have
+  thread-independent cleanup because FastMCP may run handlers on different worker
+  threads and the root container is closed from the server lifespan. Thread-affine
+  resources belong in `Scope.REQUEST`.
 - Handlers registered with FastMCP's `task=True` are not supported: they run after
   the request has finished, so no container is in scope for them.
 
