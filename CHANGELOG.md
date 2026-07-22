@@ -12,6 +12,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   FastMCP lifespan and clarified that `Scope.APP` is supported by both async and
   sync root containers.
 
+### Added
+
+- Added a GitHub Pages documentation site with a Context7 chat widget and links
+  to both documentation sources from the project README.
+
 ## [1.0.0] - 2026-07-21
 
 First release. dishka dependency injection for FastMCP tools, resources and
