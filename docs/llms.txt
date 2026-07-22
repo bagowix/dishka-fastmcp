@@ -78,6 +78,8 @@ async def get_price(item: str, catalog: FromDishka[Catalog]) -> int:
 
 ## Links
 
+- [Documentation](https://bagowix.github.io/dishka-fastmcp/)
+- [Context7](https://context7.com/bagowix/dishka-fastmcp)
 - [README](https://github.com/bagowix/dishka-fastmcp/blob/main/README.md)
 - [Source](https://github.com/bagowix/dishka-fastmcp)
 - [PyPI](https://pypi.org/project/dishka-fastmcp/)

@@ -33,6 +33,8 @@ dependencies = [
 Homepage = "https://github.com/bagowix/dishka-fastmcp"
 Repository = "https://github.com/bagowix/dishka-fastmcp"
 Changelog = "https://github.com/bagowix/dishka-fastmcp/blob/main/CHANGELOG.md"
+Documentation = "https://bagowix.github.io/dishka-fastmcp/"
+Context7 = "https://context7.com/bagowix/dishka-fastmcp"
 Issues = "https://github.com/bagowix/dishka-fastmcp/issues"
 
 [tool.hatch.version]
@@ -59,8 +61,10 @@ include = [
     "/LICENSE",
     "/README.md",
     "/SECURITY.md",
+    "/overrides",
     "/pyproject.toml",
     "/uv.lock",
+    "/zensical.toml",
 ]
 
 [tool.ruff]
@@ -173,4 +177,5 @@ dev = [
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
     "ruff>=0.15.22",
+    "zensical>=0.0.51",
 ]
