@@ -51,7 +51,7 @@ Python 3.11+, `dishka>=1.10.1`, `fastmcp>=3.2.4,<4`.
 from dishka import Provider, Scope, make_async_container, provide
 from fastmcp import FastMCP
 
-from dishka_fastmcp import FromDishka, inject, setup_dishka
+from dishka_fastmcp import FromDishka, dishka_lifespan, inject, setup_dishka
 
 
 class Catalog:
@@ -65,8 +65,8 @@ class AppProvider(Provider):
     catalog = provide(Catalog, scope=Scope.REQUEST)
 
 
-mcp = FastMCP('shop')
 container = make_async_container(AppProvider())
+mcp = FastMCP('shop', lifespan=dishka_lifespan(container))
 setup_dishka(container, mcp)
 
 
