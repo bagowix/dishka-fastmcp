@@ -76,7 +76,7 @@ Registration time and execution time are separate concerns:
 
 | Scope | Boundary | Lifetime |
 |-------|----------|----------|
-| `Scope.APP` | The whole server | Created by `make_async_container`; **you** close it on shutdown (see below) |
+| `Scope.APP` | The whole server | Owned by the root container; **you** close it on shutdown (see below) |
 | `Scope.REQUEST` | One tool call / resource read / prompt render | Opened and finalized by `@inject` around the handler |
 
 `Scope.SESSION` is **intentionally not supported.** FastMCP's middleware exposes

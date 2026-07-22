@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Corrected the documentation examples to close the root container through the
+  FastMCP lifespan and clarified that `Scope.APP` is supported by both async and
+  sync root containers.
+
 ## [1.0.0] - 2026-07-21
 
 First release. dishka dependency injection for FastMCP tools, resources and
