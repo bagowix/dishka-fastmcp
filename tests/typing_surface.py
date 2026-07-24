@@ -10,6 +10,7 @@ from typing import Any
 
 from dishka import AsyncContainer, Container, make_async_container, make_container
 from fastmcp import FastMCP
+from fastmcp.utilities.lifespan import combine_lifespans
 
 from dishka_fastmcp import FromDishka, dishka_lifespan, inject, setup_dishka
 
@@ -47,3 +48,7 @@ sync_lifespan: Callable[[FastMCP[Any]], AbstractAsyncContextManager[None]] = dis
     sync_container,
 )
 lifespan_server: FastMCP[Any] = FastMCP('typed', lifespan=dishka_lifespan(async_container))
+combined_lifespan: Callable[
+    [FastMCP[Any]],
+    AbstractAsyncContextManager[dict[str, Any]],
+] = combine_lifespans(dishka_lifespan(async_container))

@@ -1,42 +1,80 @@
-"""Transport for the root container and request context via ContextVars we own.
+"""Look up containers through FastMCP's active application.
 
-The REQUEST scope is entered by ``@inject`` (``wrap_injection(manage_scope=True)``),
-not by the middleware. This matters for sync tools: FastMCP runs them in a worker
-thread, so the scope must be entered, used and finalized in that same thread —
-otherwise a thread-affine resource (e.g. a ``sqlite3`` connection) created in the
-worker is finalized on the event loop and errors. The middleware only publishes
-the root container and the per-operation context here; ``@inject`` opens the scope
-where the handler actually runs. ContextVars propagate into ``run_in_thread``
-worker threads because anyio copies the current context when offloading.
+FastMCP owns the request context and propagates it when it offloads synchronous
+handlers to a worker thread. The container is stored as an attribute on the
+application itself, so the pair shares one lifetime and is garbage-collected
+together; ``@inject`` still opens and finalizes ``Scope.REQUEST`` in the thread
+where the handler actually runs.
 """
 
-from contextvars import ContextVar
+from threading import RLock
 from typing import Any, Final
 
 from dishka import AsyncContainer, Container
+from fastmcp import Context, FastMCP
+from fastmcp.server.dependencies import get_context, get_server, get_task_context
 
 from dishka_fastmcp.exceptions import DishkaFastMCPError
 
-__all__ = ('CONTEXT_DATA', 'ROOT_CONTAINER')
+__all__ = (
+    'get_registered_container',
+    'provide_context',
+    'register_container',
+    'unregister_container',
+)
 
-ROOT_CONTAINER: ContextVar[AsyncContainer | Container | None] = ContextVar(
-    'dishka_fastmcp_root_container',
-    default=None,
-)
-CONTEXT_DATA: ContextVar[dict[Any, Any] | None] = ContextVar(
-    'dishka_fastmcp_context_data',
-    default=None,
-)
+_ATTR: Final[str] = '__dishka_fastmcp_container__'
+_register_lock = RLock()
 
 _MISSING_SETUP: Final[str] = (
-    'No dishka container in context. Did you call setup_dishka(container, mcp) '
-    'and place @inject below the FastMCP decorator? Note: task=True handlers '
-    'run outside the request and are not supported.'
+    'No dishka container for the active FastMCP application. Did you call '
+    'setup_dishka(container, mcp) and place @inject below the FastMCP decorator? '
+    'Note: task=True handlers run outside the request and are not supported.'
 )
+_BACKGROUND_TASK: Final[str] = (
+    'FastMCP background tasks are not supported because their request scope has '
+    'already ended. Resolve dependencies during the original request and pass '
+    'plain values to the task instead.'
+)
+
+
+def get_registered_container(app: FastMCP) -> AsyncContainer | Container | None:
+    """Return the container registered for ``app``, if any."""
+    container: AsyncContainer | Container | None = getattr(app, _ATTR, None)
+    return container
+
+
+def register_container(container: AsyncContainer | Container, app: FastMCP) -> None:
+    """Associate a root container with a FastMCP application."""
+    with _register_lock:
+        existing = get_registered_container(app)
+        if existing is not None and existing is not container:
+            raise DishkaFastMCPError(
+                'A different dishka container is already registered for this FastMCP application.',
+            )
+        setattr(app, _ATTR, container)
+
+
+def unregister_container(
+    container: AsyncContainer | Container,
+    app: FastMCP,
+) -> None:
+    """Drop ``container`` from ``app`` if it is still the registered instance."""
+    with _register_lock:
+        if get_registered_container(app) is container:
+            delattr(app, _ATTR)
 
 
 def _require_container() -> AsyncContainer | Container:
-    container = ROOT_CONTAINER.get()
+    if get_task_context() is not None:
+        raise DishkaFastMCPError(_BACKGROUND_TASK)
+
+    try:
+        app = get_server()
+    except RuntimeError as exc:
+        raise DishkaFastMCPError(_MISSING_SETUP) from exc
+
+    container = get_registered_container(app)
     if container is None:
         raise DishkaFastMCPError(_MISSING_SETUP)
     return container
@@ -67,9 +105,6 @@ def get_sync_container(args: tuple[Any, ...], kwargs: dict[str, Any]) -> Contain
 
 
 def provide_context(args: tuple[Any, ...], kwargs: dict[str, Any]) -> dict[Any, Any]:
-    """Populate the REQUEST scope with the current operation's FastMCP objects."""
+    """Populate the REQUEST scope with FastMCP request objects."""
     del args, kwargs
-    data = CONTEXT_DATA.get()
-    if data is None:
-        return {}
-    return data
+    return {Context: get_context(), FastMCP: get_server()}

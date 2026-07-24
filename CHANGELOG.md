@@ -6,8 +6,38 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-07-24
+
+### Changed
+
+- `setup_dishka` now associates the container directly with its FastMCP
+  application. The active application selects its own container for each
+  operation, and an application-container reference cycle can be collected
+  normally.
+- `dishka_lifespan` now fails fast on startup if it was given a different
+  container than the one registered via `setup_dishka` — previously the
+  registered container would silently stay open after shutdown — and drops the
+  registration on shutdown, so calls after shutdown report a missing setup
+  instead of resolving a closed container.
+
+### Removed
+
+- Removed the public `DishkaMiddleware` class. Use
+  `setup_dishka(container, app)` for registration.
+- `FastMCPProvider` no longer provides `CallToolRequestParams`,
+  `ReadResourceRequestParams`, or `GetPromptRequestParams`. Receive operation
+  arguments through the component signature and use `fastmcp.Context` for
+  request metadata.
+
 ### Fixed
 
+- A handler — sync or async — that returns an awaitable, generator, or async
+  generator is now rejected with `DishkaFastMCPError`. FastMCP consumes such
+  deferred results after the handler returns, which is after `@inject` has
+  finalized the REQUEST scope. Tool handlers defined as generators (sync or
+  async) remain supported and keep the scope open for the whole iteration.
+  Rejected coroutine-like objects are closed, and returned `asyncio.Task`
+  instances are cancelled and awaited, before the scope is finalized.
 - Corrected the documentation examples to close the root container through the
   FastMCP lifespan and clarified that `Scope.APP` is supported by both async and
   sync root containers.
@@ -60,5 +90,6 @@ prompts.
 - Handlers registered with FastMCP's `task=True` are not supported: they run after
   the request has finished, so no container is in scope for them.
 
-[Unreleased]: https://github.com/bagowix/dishka-fastmcp/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/bagowix/dishka-fastmcp/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/bagowix/dishka-fastmcp/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/bagowix/dishka-fastmcp/releases/tag/v1.0.0

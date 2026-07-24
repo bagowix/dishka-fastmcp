@@ -11,7 +11,7 @@
 [![Context7](https://img.shields.io/badge/docs-Context7-1f6feb.svg)](https://context7.com/bagowix/dishka-fastmcp)
 
 [dishka](https://github.com/reagento/dishka) IoC container integration for
-[FastMCP](https://github.com/jlowin/fastmcp). Declare dependencies as
+[FastMCP](https://github.com/prefecthq/fastmcp). Declare dependencies as
 `FromDishka[Service]` in MCP tools, resources and prompts and let dishka resolve
 them per request — with real scopes, finalization and modular providers, sharing
 one container with the rest of your application.
@@ -69,10 +69,11 @@ Registration time and execution time are separate concerns:
   stripping every `FromDishka` parameter, so the schema the LLM sees contains
   only the real client-facing arguments. **Order matters** — `@inject` must be
   the inner decorator.
-- **`setup_dishka` registers a middleware** that publishes the root container
-  and current FastMCP objects through `ContextVar`s. `@inject` then opens and
-  finalizes `Scope.REQUEST` around the handler in the thread where it executes.
-  This keeps sync dependency setup, use and cleanup in the same worker thread.
+- **`setup_dishka` associates the root container with the FastMCP application.**
+  `@inject` selects that container from the application handling the current
+  operation, then opens and finalizes `Scope.REQUEST` around the handler. For a
+  sync handler, dependency setup, use, and cleanup all happen in its worker
+  thread.
 
 ## Scopes
 
@@ -81,23 +82,22 @@ Registration time and execution time are separate concerns:
 | `Scope.APP` | The whole server | Owned by the root container; **you** close it on shutdown (see below) |
 | `Scope.REQUEST` | One tool call / resource read / prompt render | Opened and finalized by `@inject` around the handler |
 
-`Scope.SESSION` is **intentionally not supported.** FastMCP's middleware exposes
-a session-start hook (`on_initialize`) but no session-teardown hook, so a
-session-lifetime container could never be finalized deterministically. Rather
-than ship a SESSION scope that silently behaves like REQUEST, dishka-fastmcp
-offers only the two scopes it can honor. If FastMCP adds a session-teardown
-hook, SESSION support will follow.
+`Scope.SESSION` is **intentionally not supported.** FastMCP does not provide a
+deterministic teardown boundary for a Dishka session container. Without that
+boundary, session-scoped resources could not be finalized reliably.
 
 ### Closing the container
 
-`setup_dishka` registers the middleware but does not own the server lifecycle, so
-it does not close the root container. `dishka_lifespan(container)` — used in the
-example above — closes it (async or sync) when the server stops, finalizing every
-`Scope.APP` provider. If you already have your own lifespan, close the container
-in its shutdown path instead (`await container.close()`, or `container.close()`
-for a sync container).
+`setup_dishka` does not own the server lifecycle, so it does not close the root
+container. `dishka_lifespan(container)` — used in the example above — closes it
+(async or sync) and removes its application registration when the server stops,
+finalizing every `Scope.APP` provider. If you already have a lifespan, compose
+it with `dishka_lifespan` using FastMCP's `combine_lifespans`. For multiple
+FastMCP servers hosted by one ASGI application, combine each
+`mcp.http_app().lifespan`; see
+[Lifecycle and scopes](https://bagowix.github.io/dishka-fastmcp/lifecycle/).
 
-FastMCP may execute sync handlers on different worker threads. Consequently,
+FastMCP may execute regular sync handlers on different worker threads. Consequently,
 `Scope.APP` dependencies in a sync container must be thread-safe and their
 cleanup must not require the thread that created them. Put thread-affine resources
 such as `sqlite3.Connection` in `Scope.REQUEST`, where dishka-fastmcp guarantees
@@ -130,11 +130,11 @@ async def summarize(text: str, summarizer: FromDishka[Summarizer]) -> str:
     return await summarizer.run(text)
 ```
 
-## Sync tools
+## Sync handlers
 
-FastMCP runs sync tools in a worker thread (`run_in_thread=True` by default).
-Use a **sync** container (`make_container`) for sync handlers; the request
-container propagates into the worker thread correctly:
+FastMCP runs regular sync handlers in a worker thread. Use a **sync** container
+(`make_container`) for them; the REQUEST scope is created and finalized in that
+same thread:
 
 ```python
 from dishka import make_container
@@ -152,13 +152,21 @@ def compute(x: int, service: FromDishka[Calculator]) -> int:
 Async handlers need an async container (`make_async_container`); mixing the two
 raises a clear error.
 
+## Return values
+
+An ordinary `def` or `async def` handler must return its completed value.
+Returning an awaitable, generator, or async generator is rejected because that
+work would outlive its REQUEST scope. FastMCP tool handlers defined directly as
+sync or async generator functions are supported; their scope stays open for the
+whole iteration.
+
 ## Accessing FastMCP objects
 
 Add `FastMCPProvider` to expose the current request's FastMCP objects to your
 dependencies via dishka's `from_context`:
 
 ```python
-from fastmcp.server.context import Context
+from fastmcp import Context
 
 from dishka_fastmcp import FastMCPProvider
 
@@ -171,9 +179,7 @@ async def notify(message: str, ctx: FromDishka[Context]) -> None:
     await ctx.info(message)
 ```
 
-`FastMCPProvider` also exposes the `FastMCP` server and the raw request params
-(`CallToolRequestParams`, `ReadResourceRequestParams`, `GetPromptRequestParams`)
-of the operation in flight.
+`FastMCPProvider` also exposes the active `FastMCP` server.
 
 ## How this compares
 
@@ -187,18 +193,20 @@ your MCP server). Reach for dishka-fastmcp when your MCP server is part of a
 larger dishka application, or when your dependencies own resources that must be
 set up and torn down per request.
 
-### vs [`fastmcp-dishka`](https://github.com/vfaddey/fastmcp-dishka)
+### Relationship to [`fastmcp-dishka`](https://github.com/vfaddey/fastmcp-dishka)
 
-`fastmcp-dishka` (Apache-2.0) is prior art covering the same surface, and both
-packages build on dishka's public `wrap_injection` helper. Differences:
+`fastmcp-dishka` (Apache-2.0) is an earlier independent implementation of the
+same core use case. This package uses a different lifecycle model:
 
-- **Scopes we can honor.** dishka-fastmcp offers `APP` and `REQUEST` only, for
-  the reason above. `fastmcp-dishka` also exposes `SESSION`, which on current
-  FastMCP resolves per request rather than per session.
-- **No coupling to FastMCP internals.** The request container travels through a
-  `ContextVar` this package owns, not a private FastMCP attribute.
-- **Quality bar.** 100% test coverage, `mypy` and `pyright` in strict mode, and
-  a CI matrix across Python 3.11–3.14.
+- **Scope ownership.** `@inject` opens and closes the request scope where the
+  handler runs, including FastMCP's sync worker thread. Thread-affine `REQUEST`
+  dependencies are therefore created and finalized on the same thread.
+- **Supported boundaries.** `APP` and `REQUEST` are supported. `SESSION` is not
+  exposed because FastMCP does not provide a deterministic session teardown
+  boundary. Background-task handlers are rejected because they outlive the
+  originating request.
+- **Container lookup.** The active container is associated with its owning
+  FastMCP application and resolved through FastMCP's public operation context.
 
 ## License
 

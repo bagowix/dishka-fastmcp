@@ -3,15 +3,14 @@
 from dishka import AsyncContainer, Container
 from fastmcp import FastMCP
 
-from dishka_fastmcp._middleware import DishkaMiddleware
+from dishka_fastmcp._container import register_container
 
 __all__ = ('setup_dishka',)
 
 
 def setup_dishka(container: AsyncContainer | Container, app: FastMCP) -> None:
-    """Register the dishka middleware on ``app``.
+    """Associate a root container with ``app``.
 
-    Call once before the server starts. Accepts an ``AsyncContainer`` (for async
-    handlers) or a ``Container`` (for sync handlers run in a worker thread).
+    Call once before the server starts.
     """
-    app.add_middleware(DishkaMiddleware(container))
+    register_container(container, app)
