@@ -46,8 +46,9 @@ uv run pytest tests/test_tools.py::test_async_tool_injects_and_hides_deps_from_s
 
 ## Scope
 
-dishka-fastmcp is deliberately focused: a thin, correct bridge between dishka and
-FastMCP's native extension points (the middleware hooks and `wrap_injection`).
+dishka-fastmcp is deliberately focused: a thin, correct bridge between dishka
+and FastMCP's supported extension points together with Dishka's
+`wrap_injection`.
 It supports the scopes FastMCP can actually honor (`APP` and `REQUEST`) — see the
 README for why `SESSION` is omitted. For anything beyond a small fix, open an
 issue first so we can agree on the approach.

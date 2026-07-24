@@ -17,30 +17,35 @@ Python 3.11+, `dishka>=1.10.1`, `fastmcp>=3.2.4,<4`.
   into the schema.
 - **Call `setup_dishka(container, mcp)` once** before running the server.
 - **Async handlers need `make_async_container`; sync handlers need
-  `make_container`** (sync tools run in a FastMCP worker thread). Mixing the two
-  raises `DishkaFastMCPError`.
+  `make_container`** (regular sync handlers run in a FastMCP worker thread).
+  Mixing the two raises `DishkaFastMCPError`.
 - **Scopes: `Scope.APP`** (server lifetime) and **`Scope.REQUEST`** (one tool
   call / resource read / prompt render, finalized when it ends). `Scope.SESSION`
   is intentionally unsupported: FastMCP has no session-teardown hook, so a
   session-lifetime scope cannot be finalized deterministically.
 - **Close the root container on shutdown** to finalize `Scope.APP` providers:
-  pass `dishka_lifespan(container)` to `FastMCP(lifespan=...)`.
+  pass `dishka_lifespan(container)` to `FastMCP(lifespan=...)`. Compose this
+  helper with an existing lifespan so shutdown also removes the container's
+  application registration.
 - **Sync `Scope.APP` dependencies must be thread-safe.** FastMCP may use different
   worker threads, and APP cleanup runs from the server lifespan. Put thread-affine
   resources in `Scope.REQUEST`, which is created and finalized in one worker.
 - **`task=True` handlers are not supported.** They run after the request (and its
   REQUEST scope) is over, so injection there raises `DishkaFastMCPError`. Resolve
   dependencies inside the request and pass plain values to the task.
+- **Return completed values from ordinary handlers.** Returning an awaitable,
+  generator, or async generator is rejected because it would outlive the
+  REQUEST scope. Tool handlers defined directly as generator functions remain
+  supported for the whole iteration.
 
 ## API
 
-- `setup_dishka(container, app)` — register the dishka middleware on a `FastMCP` app.
+- `setup_dishka(container, app)` — associate a root container with a `FastMCP` app.
 - `inject` — decorator binding `FromDishka[...]` parameters; auto-detects sync vs async.
 - `FromDishka[T]` — mark a parameter for injection (re-exported from dishka).
 - `FastMCPProvider()` — add to the container to inject the current request's
-  `Context`, the `FastMCP` server, or the raw request params
-  (`CallToolRequestParams` / `ReadResourceRequestParams` / `GetPromptRequestParams`)
-  via dishka's `from_context`.
+  `fastmcp.Context` or `fastmcp.FastMCP` via dishka's `from_context`. Operation
+  arguments remain regular tool, resource, or prompt parameters.
 - `dishka_lifespan(container)` — build a `FastMCP` lifespan that closes the
   container (async or sync) on shutdown.
 - `DishkaFastMCPError` — raised when the container is missing or the wrong kind.

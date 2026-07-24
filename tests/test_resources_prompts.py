@@ -1,13 +1,12 @@
-"""Phase 2: injection into resources and prompts, and FastMCPProvider context."""
+"""Injection into resources and prompts, including FastMCP request context."""
 
 from collections.abc import Iterator
 from typing import NewType
 
 import pytest
 from dishka import Provider, Scope, make_async_container, make_container, provide
-from fastmcp import FastMCP
-from fastmcp.server.context import Context
-from mcp.types import ReadResourceRequestParams, TextContent
+from fastmcp import Context, FastMCP
+from mcp.types import TextContent
 
 from dishka_fastmcp import FastMCPProvider, FromDishka, inject, setup_dishka
 
@@ -31,7 +30,7 @@ class AppProvider(Provider):
 
 
 @pytest.mark.asyncio
-async def test_async_resource_injects_dep_and_uri_params() -> None:
+async def test_async_resource_injects_dependency() -> None:
     provider = AppProvider()
     container = make_async_container(provider, FastMCPProvider())
     mcp = FastMCP('test')
@@ -43,16 +42,16 @@ async def test_async_resource_injects_dep_and_uri_params() -> None:
         name: str,
         app: FromDishka[AppDep],
         req: FromDishka[ReqDep],
-        params: FromDishka[ReadResourceRequestParams],
+        context: FromDishka[Context],
     ) -> str:
-        return f'{app}:{req}:{name}:{params.uri}'
+        return f'{app}:{req}:{name}:{context.fastmcp.name}'
 
     try:
         templates = await mcp.list_resource_templates()
         assert templates[0].uri_template == 'data://items/{name}'
 
         result = await mcp.read_resource('data://items/one')
-        assert result.contents[0].content == 'APP:REQ:one:data://items/one'
+        assert result.contents[0].content == 'APP:REQ:one:test'
         assert provider.req_released
     finally:
         await container.close()
@@ -67,8 +66,12 @@ async def test_async_prompt_injects_dep() -> None:
 
     @mcp.prompt
     @inject
-    async def greet(name: str, app: FromDishka[AppDep]) -> str:
-        return f'{app}:{name}'
+    async def greet(
+        name: str,
+        app: FromDishka[AppDep],
+        context: FromDishka[Context],
+    ) -> str:
+        return f'{app}:{name}:{context.fastmcp.name}'
 
     try:
         prompts = await mcp.list_prompts()
@@ -77,7 +80,7 @@ async def test_async_prompt_injects_dep() -> None:
         result = await mcp.render_prompt('greet', {'name': 'two'})
         message = result.messages[0].content
         assert isinstance(message, TextContent)
-        assert message.text == 'APP:two'
+        assert message.text == 'APP:two:test'
     finally:
         await container.close()
 

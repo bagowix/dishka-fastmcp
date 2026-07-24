@@ -1,8 +1,7 @@
-"""Phase 1 vertical slice: dependency injection into MCP tools via on_call_tool."""
+"""Dependency injection into MCP tools."""
 
 import threading
 from collections.abc import Iterator
-from types import SimpleNamespace
 from typing import NewType
 
 import pytest
@@ -14,12 +13,11 @@ from dishka import (
     provide,
 )
 from fastmcp import FastMCP
-from fastmcp.server.context import Context
 from mcp.types import TextContent
 
 from dishka_fastmcp import FromDishka, inject, setup_dishka
-from dishka_fastmcp._container import provide_context
-from dishka_fastmcp._middleware import DishkaMiddleware
+from dishka_fastmcp._container import get_async_container
+from dishka_fastmcp.exceptions import DishkaFastMCPError
 
 AppDep = NewType('AppDep', str)
 ReqDep = NewType('ReqDep', str)
@@ -38,6 +36,11 @@ class AppProvider(Provider):
     def req_dep(self) -> Iterator[ReqDep]:
         yield ReqDep('REQ')
         self.req_released.set()
+
+
+def test_container_lookup_outside_fastmcp_request_raises_clear_error() -> None:
+    with pytest.raises(DishkaFastMCPError, match='setup_dishka'):
+        get_async_container((), {})
 
 
 @pytest.mark.asyncio
@@ -145,16 +148,3 @@ async def test_sync_tool_with_async_container_raises() -> None:
             await mcp.call_tool('work')
     finally:
         await container.close()
-
-
-def test_provide_context_is_empty_outside_an_operation() -> None:
-    assert provide_context((), {}) == {}
-
-
-def test_context_data_omits_context_without_fastmcp_context() -> None:
-    message = object()
-    context = SimpleNamespace(message=message, fastmcp_context=None)
-    data = DishkaMiddleware._context_data(context)  # type: ignore[arg-type]
-    assert data == {type(message): message}
-    assert Context not in data
-    assert FastMCP not in data

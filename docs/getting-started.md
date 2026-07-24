@@ -81,9 +81,9 @@ async def summarize(text: str, service: FromDishka[Summarizer]) -> str:
 
 ## Sync handlers
 
-Use a sync Dishka container for sync handlers. FastMCP runs them in a worker
-thread, and dishka-fastmcp keeps dependency creation, usage, and cleanup in that
-thread.
+Use a sync Dishka container for regular sync handlers. FastMCP runs them in a
+worker thread, and dishka-fastmcp keeps dependency creation, usage, and cleanup
+in that thread.
 
 ```python
 from dishka import make_container

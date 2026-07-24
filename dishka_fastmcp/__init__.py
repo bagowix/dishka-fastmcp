@@ -3,7 +3,6 @@
 from dishka import FromDishka
 
 from dishka_fastmcp._inject import inject
-from dishka_fastmcp._middleware import DishkaMiddleware
 from dishka_fastmcp.exceptions import DishkaFastMCPError
 from dishka_fastmcp.lifespan import dishka_lifespan
 from dishka_fastmcp.providers import FastMCPProvider
@@ -14,7 +13,6 @@ __version__ = VERSION
 
 __all__ = (
     'DishkaFastMCPError',
-    'DishkaMiddleware',
     'FastMCPProvider',
     'FromDishka',
     '__version__',

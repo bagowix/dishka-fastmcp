@@ -1,10 +1,4 @@
-"""Lifespan helper that closes the dishka container on server shutdown.
-
-FastMCP takes its lifespan at construction and passes the server to it, so the
-container must exist first. ``setup_dishka`` cannot own the server lifecycle
-(FastMCP wraps the lifespan in private machinery), hence a helper rather than
-automatic wiring.
-"""
+"""Lifespan helper that closes the dishka container on server shutdown."""
 
 from collections.abc import AsyncGenerator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
@@ -12,6 +6,9 @@ from typing import Any
 
 from dishka import AsyncContainer, Container
 from fastmcp import FastMCP
+
+from dishka_fastmcp._container import get_registered_container, unregister_container
+from dishka_fastmcp.exceptions import DishkaFastMCPError
 
 __all__ = ('dishka_lifespan',)
 
@@ -26,16 +23,29 @@ def dishka_lifespan(
     ``AsyncContainer`` and a sync ``Container``. APP-scoped dependencies in a
     sync container must be thread-safe and have thread-independent cleanup;
     thread-affine resources belong in ``Scope.REQUEST``.
+
+    On startup the lifespan raises :class:`DishkaFastMCPError` if ``setup_dishka``
+    registered a *different* container for the app — otherwise the registered one
+    would silently outlive the shutdown.
     """
 
     @asynccontextmanager
-    async def lifespan(_: FastMCP[Any]) -> AsyncGenerator[None, None]:
+    async def lifespan(app: FastMCP[Any]) -> AsyncGenerator[None, None]:
+        registered = get_registered_container(app)
+        if registered is not None and registered is not container:
+            raise DishkaFastMCPError(
+                'dishka_lifespan received a different container than the one '
+                'registered via setup_dishka for this FastMCP application.',
+            )
         try:
             yield
         finally:
-            if isinstance(container, AsyncContainer):
-                await container.close()
-            else:
-                container.close()
+            try:
+                if isinstance(container, AsyncContainer):
+                    await container.close()
+                else:
+                    container.close()
+            finally:
+                unregister_container(container, app)
 
     return lifespan
