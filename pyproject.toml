@@ -92,6 +92,7 @@ ignore = [
   "FIX002",
   "D105",
   "D107",
+  "CPY001", # the MIT LICENSE file is the copyright record, not per-file headers
 ]
 
 [tool.ruff.lint.pydocstyle]
@@ -176,6 +177,6 @@ dev = [
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
-    "ruff>=0.15.22",
+    "ruff>=0.16.1",
     "zensical>=0.0.51",
 ]
