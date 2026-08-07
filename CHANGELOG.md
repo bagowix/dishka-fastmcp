@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-08-08
+
 ### Fixed
 
 - A sync handler that returns an async generator now has that generator closed
