@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- A sync handler that returns an async generator now has that generator closed
+  before `DishkaFastMCPError` is raised. Every other rejected deferred result was
+  already closed on both the sync and the async path; this one case was left
+  dangling, so the generator stayed open until the garbage collector reached it.
+  Nothing observable broke — an unstarted async generator holds no resources —
+  but rejection now finalizes what it rejects, without exception.
+
 ## [2.0.0] - 2026-07-24
 
 ### Changed

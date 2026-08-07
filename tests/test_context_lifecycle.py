@@ -278,10 +278,11 @@ async def test_sync_handler_returning_generator_is_rejected() -> None:
 
 
 @pytest.mark.asyncio
-async def test_sync_handler_returning_async_generator_is_rejected() -> None:
+async def test_sync_handler_returning_async_generator_is_rejected_and_closed() -> None:
     container = make_container(SyncResourceProvider())
     mcp = FastMCP('test', mask_error_details=False)
     setup_dishka(container, mcp)
+    returned: list[AsyncIterator[RequestResource]] = []
 
     @mcp.tool
     @inject
@@ -289,11 +290,15 @@ async def test_sync_handler_returning_async_generator_is_rejected() -> None:
         async def deferred() -> AsyncIterator[RequestResource]:
             yield resource
 
-        return deferred()
+        generator = deferred()
+        returned.append(generator)
+        return generator
 
     try:
         with pytest.raises(Exception, match='returned an async generator'):
             await mcp.call_tool('handler')
+        with pytest.raises(StopAsyncIteration):
+            await anext(returned[0])
     finally:
         container.close()
 

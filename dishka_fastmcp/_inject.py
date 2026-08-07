@@ -6,7 +6,8 @@ strips ``FromDishka`` parameters from ``__signature__``, so it has to run first;
 """
 
 import asyncio
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
+from contextlib import suppress
 from functools import wraps
 from inspect import (
     isasyncgen,
@@ -39,6 +40,19 @@ def _close_coroutine_like(value: object) -> None:
     """Close native and generator-based coroutines without awaiting them."""
     if iscoroutine(value) or isgenerator(value):
         value.close()
+
+
+def _close_async_generator_from_sync(generator: AsyncGenerator[Any, Any]) -> None:
+    """Finalize an async generator handed back by a synchronous handler.
+
+    A sync handler cannot await, so it cannot have advanced the generator: the one
+    it returns is always still unstarted, and ``aclose()`` on an unstarted async
+    generator completes without suspending. That makes it safe to drive by hand,
+    which the async path does not need — there ``aclose()`` is simply awaited.
+    """
+    closer = generator.aclose()
+    with suppress(StopIteration):
+        closer.send(None)
 
 
 def _callable_name(func: object) -> str:
@@ -139,6 +153,7 @@ def inject_sync(func: Callable[P, T]) -> Callable[P, T]:
             result.close()
             result_kind = 'a generator'
         elif isasyncgen(result):
+            _close_async_generator_from_sync(result)
             result_kind = 'an async generator'
         else:
             return result
