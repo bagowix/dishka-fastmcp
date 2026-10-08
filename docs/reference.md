@@ -45,18 +45,19 @@ dishka_lifespan(
 ```
 
 Returns a FastMCP lifespan that registers the container for the application on
-startup, as `setup_dishka` does, and closes the async or sync container and
-removes the registration on shutdown. Its lifespan state is
+startup, as `setup_dishka` does. By default it also closes the async or sync
+container and removes the registration on shutdown. Its lifespan state is
 `{'dishka_fastmcp.container': container}`, which is how servers mounted into the
 application find the container during the MCP requests it serves. Compose this
 lifespan with other FastMCP lifespans using
-`fastmcp.utilities.lifespan.combine_lifespans`. On startup it raises
-`DishkaFastMCPError` if `setup_dishka` registered a different container for the
-app.
+`fastmcp.utilities.lifespan.combine_lifespans`, or wrap it in
+`fastmcp.server.lifespan.ContextManagerLifespan` to compose it with `|`. On
+startup it raises `DishkaFastMCPError` if `setup_dishka` registered a different
+container for the app.
 
 With `close=False` the lifespan registers the container and publishes it in the
 same way, but leaves closing it to the container's owner, and a registration
-made by `setup_dishka` survives the shutdown. See
+that `setup_dishka` made before startup survives the shutdown. See
 [Sharing the container](lifecycle.md#sharing-the-container).
 
 ## `FastMCPProvider`
@@ -72,6 +73,8 @@ import their entire integration surface from one package.
 
 ## `DishkaFastMCPError`
 
-Raised for integration misuse, including a missing container registration, a
-container type that does not match the handler's sync or async execution model,
-or injection inside a `task=True` background worker.
+Raised for integration misuse: a missing container registration, a container
+type that does not match the handler's sync or async execution model, a
+different container registered for the same application, a deferred result
+returned by an ordinary handler, or injection inside a `task=True` background
+worker.

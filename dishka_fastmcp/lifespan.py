@@ -1,4 +1,4 @@
-"""Lifespan helper that closes the dishka container on server shutdown."""
+"""Lifespan helper that publishes the dishka container for a FastMCP server."""
 
 from collections.abc import AsyncGenerator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
@@ -23,24 +23,26 @@ def dishka_lifespan(
     *,
     close: bool = True,
 ) -> Callable[[FastMCP[Any]], AbstractAsyncContextManager[dict[str, Any]]]:
-    """Build a FastMCP lifespan that publishes ``container`` and closes it on shutdown.
+    """Build a FastMCP lifespan that publishes ``container`` for the server's lifetime.
 
     Pass the result to ``FastMCP(lifespan=...)``. On startup the lifespan
     registers ``container`` for the app, as ``setup_dishka`` does, and its
     lifespan state carries the container, so servers mounted into this one
     resolve their dependencies from it during the MCP requests it serves. Combine
-    it with other dict-yielding lifespans through ``combine_lifespans``.
+    it through ``combine_lifespans`` with lifespans that yield a mapping or
+    ``None``.
 
-    On shutdown the root container is closed, finalizing every ``Scope.APP``
-    provider, and the registration is dropped. Works with both an
-    ``AsyncContainer`` and a sync ``Container``. APP-scoped dependencies in a
-    sync container must be thread-safe and have thread-independent cleanup;
-    thread-affine resources belong in ``Scope.REQUEST``.
+    By default the lifespan also closes the root container on shutdown,
+    finalizing every ``Scope.APP`` provider, and drops the registration. Works
+    with both an ``AsyncContainer`` and a sync ``Container``. APP-scoped
+    dependencies in a sync container must be thread-safe and have
+    thread-independent cleanup; thread-affine resources belong in
+    ``Scope.REQUEST``.
 
     Pass ``close=False`` when something else owns the container, such as a web
     application, a worker or a test fixture that outlives the server. The owner
-    then closes the container, and a registration made by ``setup_dishka``
-    survives the shutdown.
+    then closes the container, and a registration that ``setup_dishka`` made
+    before startup survives the shutdown.
 
     On startup the lifespan raises :class:`DishkaFastMCPError` if ``setup_dishka``
     registered a *different* container for the app — otherwise the registered one

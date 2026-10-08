@@ -20,8 +20,10 @@ Python 3.11+, `dishka>=1.10.1`, `fastmcp>=4.0.0,<5`.
   lifespan includes `dishka_lifespan(container)` use that container during the
   MCP requests the server serves (any depth, with or without `namespace`). A
   router mounted into several servers uses the serving server's container. A
-  router with its own `setup_dishka` or `dishka_lifespan` keeps its container;
-  routers below it still take the serving server's. A direct `server.call_tool()`
+  router with its own `setup_dishka` keeps its container, and so does one with
+  its own `dishka_lifespan` if it is mounted before the server starts. Routers
+  below it still take the serving server's, silently, so give them
+  `setup_dishka` when they need the middle one. A direct `server.call_tool()`
   outside an MCP request does not reach mounted routers; test them through
   `Client(server)`.
 - **Async handlers need `make_async_container`; sync handlers need
@@ -63,7 +65,9 @@ Python 3.11+, `dishka>=1.10.1`, `fastmcp>=4.0.0,<5`.
 - `dishka_lifespan(container, *, close=True)` — build a `FastMCP` lifespan that
   registers the container, hands it to mounted routers and closes it (async or
   sync) on shutdown; `close=False` leaves closing to the container's owner.
-- `DishkaFastMCPError` — raised when the container is missing or the wrong kind.
+- `DishkaFastMCPError` — raised on integration misuse: a missing or wrong-kind
+  container, a different container already registered for the app, a returned
+  awaitable or generator, or injection inside a `task=True` worker.
 
 ## Usage
 

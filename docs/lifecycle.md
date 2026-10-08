@@ -8,10 +8,12 @@ decorator cleans the public signature during registration. At execution time,
 
 | Scope | Boundary | Owner |
 |---|---|---|
-| `Scope.APP` | Server lifetime | Root container, closed by the FastMCP lifespan |
+| `Scope.APP` | Server lifetime | Root container, closed by `dishka_lifespan` or by its owner |
 | `Scope.REQUEST` | One tool call, resource read, or prompt render | `@inject` |
 
-Use `dishka_lifespan` when the FastMCP server owns the container:
+Pass `dishka_lifespan` to the FastMCP server you run. By default it closes the
+container on shutdown, which fits a container the server owns; for a shared
+container see [Sharing the container](#sharing-the-container):
 
 ```python
 container = make_async_container(AppProvider())
@@ -55,6 +57,25 @@ order. Placing `dishka_lifespan` last closes the Dishka container before the
 other lifespan releases its resources, which suits providers that depend on
 those resources. When the other lifespan uses the container instead, list
 `dishka_lifespan` first; see [Sharing the container](#sharing-the-container).
+
+FastMCP 4 also composes `@lifespan` functions with `|`. That operator accepts
+only `Lifespan` instances, and `dishka_lifespan` returns a plain context
+manager factory, so wrap it in FastMCP's `ContextManagerLifespan` first:
+
+```python
+from fastmcp.server.lifespan import ContextManagerLifespan, lifespan
+
+
+@lifespan
+async def database(server: FastMCP) -> AsyncIterator[dict[str, object]]:
+    yield {'database': await connect()}
+
+
+mcp = FastMCP(
+    'app',
+    lifespan=database | ContextManagerLifespan(dishka_lifespan(container)),
+)
+```
 
 The combined lifespan above belongs to a `FastMCP` instance. When composing
 FastMCP with FastAPI or Starlette, keep `dishka_lifespan` on the FastMCP server
@@ -111,17 +132,24 @@ container is already closed while `app_lifespan` shuts down.
 
 When the container belongs to something else, pass `close=False`. The lifespan
 still registers the container and hands it to mounted routers, and the owner
-closes it. A registration made by `setup_dishka` survives the shutdown, so
-direct `call_tool()` calls keep working between sessions:
+closes it:
 
 ```python
 mcp = FastMCP('app', lifespan=dishka_lifespan(container, close=False))
+setup_dishka(container, mcp)
 ```
 
+A registration that `setup_dishka` made before the server started survives the
+shutdown, so direct `call_tool()` calls keep working between sessions. It still
+points at the container after the owner closes it, so stop calling the server
+at that point.
+
 Ordering cannot help when the owner's lifecycle runs outside this
-`combine_lifespans` call: a FastStream application, a worker process loop, or a
-pytest fixture that shares one container across several `Client(server)`
-sessions. Use `close=False` there.
+`combine_lifespans` call: a FastStream application, a background worker, or a
+test session. Each `async with Client(server)` block starts and stops the
+server, so with the default `close=True` two blocks in a row close the
+container when the first one exits, and the second one silently gets new
+`Scope.APP` dependencies. Use `close=False` there.
 
 ## Mounted servers
 
@@ -152,15 +180,21 @@ hands that state to every MCP request the server serves, mounted components
 included, so a component whose own server has no container takes it from there.
 The rules that follow from it:
 
-- A mounted server with its own `setup_dishka` or `dishka_lifespan` keeps its own
-  container. Servers mounted under it without a container of their own use the
-  serving root's, never the nearest set-up server's.
+- A mounted server with its own `setup_dishka` keeps its own container. Its own
+  `dishka_lifespan` does the same only when the server is mounted before the
+  parent starts: FastMCP runs a mounted server's lifespan together with the
+  parent's, so a server mounted while the parent serves needs `setup_dishka`.
+- Servers mounted under such a server without a container of their own use the
+  serving root's container, never the nearest set-up server's. Nothing reports
+  it when the root's container provides the same types, so call `setup_dishka`
+  on a server that must use the middle server's container.
 - A router mounted into several servers uses the container of the server that
   serves the request, so one router module can back several applications.
 - A server without `dishka_lifespan` hands no container to its routers, even when
-  the same router is mounted into another server that has one. The same holds when
-  the serving server's lifespan state is not a mapping, so combine `dishka_lifespan`
-  with dict-yielding lifespans only.
+  the same router is mounted into another server that has one. The container
+  must also reach the serving server's lifespan state: `combine_lifespans` keeps
+  it next to lifespans that yield a mapping or `None`, and a lifespan of your own
+  that enters `dishka_lifespan` must pass its state through.
 - The container travels with MCP requests (a `Client`, HTTP, stdio). A direct
   `await server.call_tool(...)` outside a request reaches only the server's own
   components; test mounted routers through `Client(server)`.

@@ -79,8 +79,9 @@ Registration time and execution time are separate concerns:
   puts the container into the lifespan state of the server you serve, and routers
   mounted into it at any depth read it from there during MCP requests. A router
   mounted into several servers uses the container of the one serving the
-  request. A router with its own `setup_dishka` or `dishka_lifespan` keeps its
-  own container, but routers below it take the serving root's. Direct
+  request. A router with its own `setup_dishka` keeps its own container, and so
+  does one with its own `dishka_lifespan` if it is mounted before the server
+  starts. Routers below such a router still take the serving root's. Direct
   `server.call_tool()` calls outside an MCP request and servers behind
   `create_proxy` are not covered; see
   [Mounted servers](https://bagowix.github.io/dishka-fastmcp/lifecycle/#mounted-servers).
@@ -109,7 +110,7 @@ FastMCP servers hosted by one ASGI application, combine each
 
 If the same container also serves FastAPI, FastStream, a worker or a test
 session, the MCP server must not close it while they still use it. List
-`mcp_app.lifespan` first in `combine_lifespans`, or pass
+`mcp.http_app().lifespan` first in `combine_lifespans`, or pass
 `dishka_lifespan(container, close=False)` and close the container where it is
 owned; see
 [Sharing the container](https://bagowix.github.io/dishka-fastmcp/lifecycle/#sharing-the-container).
@@ -157,13 +158,14 @@ same thread:
 from dishka import make_container
 
 container = make_container(AppProvider())
+mcp = FastMCP('sync', lifespan=dishka_lifespan(container))
 setup_dishka(container, mcp)
 
 
 @mcp.tool
 @inject
-def compute(x: int, service: FromDishka[Calculator]) -> int:
-    return service.square(x)
+def get_price_sync(item: str, catalog: FromDishka[Catalog]) -> int:
+    return catalog.price(item)
 ```
 
 Async handlers need an async container (`make_async_container`); mixing the two
@@ -224,6 +226,8 @@ same core use case. This package uses a different lifecycle model:
   originating request.
 - **Container lookup.** The active container is associated with its owning
   FastMCP application and resolved through FastMCP's public operation context.
+  Routers mounted into a served server take its container from the lifespan
+  state FastMCP hands to each request.
 
 ## License
 

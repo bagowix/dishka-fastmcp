@@ -23,11 +23,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `create_proxy` needs its own `setup_dishka`.
 - `dishka_lifespan(container, close=False)` leaves closing the container to its
   owner. Use it when the container is shared with FastAPI, FastStream, a worker
-  or a test session. Mounted routers find the container only through
-  `dishka_lifespan`, so before this option such an application had to let the
-  MCP server close the shared container on shutdown. With `close=False` the
-  lifespan still registers the container and hands it to mounted routers, and a
-  registration made by `setup_dishka` survives the shutdown.
+  or a test session. Routers without a container of their own get the root's
+  container only through `dishka_lifespan`, which otherwise closes it when the
+  MCP server stops. With `close=False` the lifespan still registers the
+  container and hands it to mounted routers, and a registration that
+  `setup_dishka` made before startup survives the shutdown.
 - The lifecycle guide now covers the lifespan order for a shared container.
   FastMCP's FastAPI guide combines `app_lifespan` before `mcp_app.lifespan`, so
   the container closes first and `app_lifespan` shuts down against a closed
@@ -44,13 +44,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   [upgrade guide](https://gofastmcp.com/getting-started/upgrading/from-fastmcp-3).
   The functions and classes this package exports keep their names and
   arguments; the return type of `dishka_lifespan` changed (see below). Injection
-  works on both protocol eras FastMCP 4 speaks: the sessionless 2026-07-28 era its `Client` negotiates
-  by default, and the legacy handshake.
+  works on both protocol eras FastMCP 4 speaks: the sessionless 2026-07-28 era
+  its `Client` negotiates by default, and the legacy handshake.
 - `dishka_lifespan` now yields `{'dishka_fastmcp.container': container}` as the
   server's lifespan state, so its type is
   `Callable[[FastMCP], AbstractAsyncContextManager[dict[str, Any]]]`. Code that
   annotated it with `AbstractAsyncContextManager[None]` needs the new type; it
-  still composes with other dict-yielding lifespans through `combine_lifespans`.
+  still composes through `combine_lifespans` with lifespans that yield a mapping
+  or `None`.
 - `dishka_lifespan` now also registers its container for the application on
   startup, as `setup_dishka` does. A server whose lifespan includes it resolves
   its own components during MCP requests even without `setup_dishka`; keep
