@@ -6,6 +6,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- dishka-fastmcp now requires FastMCP 4 (`fastmcp>=4.0.0,<5`); FastMCP 3.x is no
+  longer supported. If your server still runs on FastMCP 3, stay on
+  dishka-fastmcp 2.0.x and migrate the server first with FastMCP's
+  [upgrade guide](https://gofastmcp.com/getting-started/upgrading/from-fastmcp-3).
+  The public API of this package is unchanged. Injection works on both protocol
+  eras FastMCP 4 speaks: the sessionless 2026-07-28 era its `Client` negotiates
+  by default, and the legacy handshake.
+- `task=True` handlers are still rejected with `DishkaFastMCPError`. FastMCP 4
+  moved background tasks into the optional `fastmcp-tasks` extension, and
+  dishka-fastmcp recognizes its workers without importing it, so `fastmcp[tasks]`
+  stays an opt-in for your server. The error message no longer claims the request
+  scope has already ended: `@inject` owns its REQUEST scope, and the actual reason
+  is that the handler runs in a worker outside the request that queued it.
+
 ## [2.0.1] - 2026-08-08
 
 ### Fixed
@@ -101,6 +117,7 @@ prompts.
 - Handlers registered with FastMCP's `task=True` are not supported: they run after
   the request has finished, so no container is in scope for them.
 
-[Unreleased]: https://github.com/bagowix/dishka-fastmcp/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/bagowix/dishka-fastmcp/compare/v2.0.1...HEAD
+[2.0.1]: https://github.com/bagowix/dishka-fastmcp/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/bagowix/dishka-fastmcp/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/bagowix/dishka-fastmcp/releases/tag/v1.0.0

@@ -59,5 +59,6 @@ import their entire integration surface from one package.
 
 ## `DishkaFastMCPError`
 
-Raised for integration misuse, including a missing container registration or a
-container type that does not match the handler's sync or async execution model.
+Raised for integration misuse, including a missing container registration, a
+container type that does not match the handler's sync or async execution model,
+or injection inside a `task=True` background worker.

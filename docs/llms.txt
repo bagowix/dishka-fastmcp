@@ -6,7 +6,7 @@
 > container with the rest of the application.
 
 Install: `uv add dishka-fastmcp` (or `pip install dishka-fastmcp`). Requires
-Python 3.11+, `dishka>=1.10.1`, `fastmcp>=3.2.4,<4`.
+Python 3.11+, `dishka>=1.10.1`, `fastmcp>=4.0.0,<5`.
 
 ## Rules that matter
 
@@ -30,9 +30,10 @@ Python 3.11+, `dishka>=1.10.1`, `fastmcp>=3.2.4,<4`.
 - **Sync `Scope.APP` dependencies must be thread-safe.** FastMCP may use different
   worker threads, and APP cleanup runs from the server lifespan. Put thread-affine
   resources in `Scope.REQUEST`, which is created and finalized in one worker.
-- **`task=True` handlers are not supported.** They run after the request (and its
-  REQUEST scope) is over, so injection there raises `DishkaFastMCPError`. Resolve
-  dependencies inside the request and pass plain values to the task.
+- **`task=True` handlers are not supported.** They run in a `fastmcp-tasks`
+  worker, outside the request that queued them, so injection there raises
+  `DishkaFastMCPError`. Resolve dependencies inside the request and pass plain
+  values to the task.
 - **Return completed values from ordinary handlers.** Returning an awaitable,
   generator, or async generator is rejected because it would outlive the
   REQUEST scope. Tool handlers defined directly as generator functions remain

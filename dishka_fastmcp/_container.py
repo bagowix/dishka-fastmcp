@@ -7,12 +7,13 @@ together; ``@inject`` still opens and finalizes ``Scope.REQUEST`` in the thread
 where the handler actually runs.
 """
 
+import sys
 from threading import RLock
 from typing import Any, Final
 
 from dishka import AsyncContainer, Container
 from fastmcp import Context, FastMCP
-from fastmcp.server.dependencies import get_context, get_server, get_task_context
+from fastmcp.server.dependencies import get_context, get_server
 
 from dishka_fastmcp.exceptions import DishkaFastMCPError
 
@@ -32,9 +33,8 @@ _MISSING_SETUP: Final[str] = (
     'Note: task=True handlers run outside the request and are not supported.'
 )
 _BACKGROUND_TASK: Final[str] = (
-    'FastMCP background tasks are not supported because their request scope has '
-    'already ended. Resolve dependencies during the original request and pass '
-    'plain values to the task instead.'
+    'FastMCP background tasks (task=True) are not supported. Resolve dependencies '
+    'during the original request and pass plain values to the task instead.'
 )
 
 
@@ -65,8 +65,17 @@ def unregister_container(
             delattr(app, _ATTR)
 
 
+def _in_background_task() -> bool:
+    # fastmcp-tasks imports this module before it starts a task worker
+    # (fastmcp_tasks.lifespan.docket_lifespan). Looking it up instead of importing
+    # it keeps fastmcp-tasks optional and skips the client-side extension its
+    # package registers on import.
+    tasks = sys.modules.get('fastmcp_tasks.context')
+    return tasks is not None and tasks.get_task_context() is not None
+
+
 def _require_container() -> AsyncContainer | Container:
-    if get_task_context() is not None:
+    if _in_background_task():
         raise DishkaFastMCPError(_BACKGROUND_TASK)
 
     try:

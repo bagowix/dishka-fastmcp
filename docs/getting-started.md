@@ -20,8 +20,8 @@
     poetry add dishka-fastmcp
     ```
 
-The package requires Python 3.11+, Dishka 1.10.1+, and FastMCP 3.2.4 through
-the latest 3.x release.
+The package requires Python 3.11+, Dishka 1.10.1+, and FastMCP 4.0.0 through
+the latest 4.x release.
 
 ## Configure the server
 

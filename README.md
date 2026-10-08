@@ -58,7 +58,8 @@ time and never appears in the schema.
 uv add dishka-fastmcp        # or: pip install dishka-fastmcp
 ```
 
-Requires Python 3.11+, `dishka>=1.10.1`, `fastmcp>=3.2.4,<4`.
+Requires Python 3.11+, `dishka>=1.10.1`, `fastmcp>=4.0.0,<5`. Servers still on
+FastMCP 3.x should stay on dishka-fastmcp 2.0.x.
 
 ## How it works
 
@@ -105,12 +106,12 @@ creation, use and finalization in one worker thread.
 
 ### Background tasks
 
-FastMCP's `task=True` handlers are **not supported**. The tool call returns as
-soon as the work is queued, so the request — and with it the REQUEST scope — is
-already over by the time the worker runs the handler. Injection there fails with
-`DishkaFastMCPError`. Keep `FromDishka` handlers request-bound; if you need
-background work, resolve dependencies inside the request and pass plain values
-to the task.
+FastMCP's `task=True` handlers are **not supported**. In FastMCP 4 they come from
+the optional `fastmcp-tasks` extension and run in a task worker, detached from the
+request that queued them and possibly in another process. `@inject` detects the
+worker and raises `DishkaFastMCPError` there. Keep `FromDishka` handlers
+request-bound; if you need background work, resolve dependencies inside the
+request and pass plain values to the task.
 
 ## Resources and prompts
 
@@ -175,8 +176,8 @@ container = make_async_container(AppProvider(), FastMCPProvider())
 
 @mcp.tool
 @inject
-async def notify(message: str, ctx: FromDishka[Context]) -> None:
-    await ctx.info(message)
+async def request_id(ctx: FromDishka[Context]) -> str:
+    return ctx.request_id
 ```
 
 `FastMCPProvider` also exposes the active `FastMCP` server.

@@ -116,6 +116,7 @@ different workers and APP cleanup happens during server shutdown.
 `Scope.SESSION` is not supported because FastMCP does not provide a deterministic
 teardown boundary for a Dishka session container.
 
-Handlers registered with `task=True` are also unsupported. Background execution
-starts after the originating request context has ended. Resolve dependencies
-during the request and pass plain values to background work.
+Handlers registered with `task=True` are also unsupported. FastMCP 4 runs them
+in a `fastmcp-tasks` worker, outside the request that queued them, and `@inject`
+raises `DishkaFastMCPError` there. Resolve dependencies during the request and
+pass plain values to background work.

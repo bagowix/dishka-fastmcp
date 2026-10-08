@@ -22,8 +22,8 @@ setup_dishka(container, mcp)
 
 @mcp.tool
 @inject
-async def notify(message: str, ctx: FromDishka[Context]) -> None:
-    await ctx.info(message)
+async def request_id(ctx: FromDishka[Context]) -> str:
+    return ctx.request_id
 ```
 
 ## Available objects
@@ -35,9 +35,9 @@ All entries are request-scoped and resolved only when requested:
 | `fastmcp.Context` | Current FastMCP operation context |
 | `fastmcp.FastMCP` | Current server instance |
 
-Use `Context` for request IDs, client logging, progress reporting, resource
-access, sampling, elicitation, and session state. When a child server is mounted,
-the injected `FastMCP` value is the server that owns the executing component.
+Use `Context` for request IDs, progress reporting, and resource access. When a
+child server is mounted, the injected `FastMCP` value is the server that owns the
+executing component.
 
 ## Using context in providers
 

@@ -1,7 +1,7 @@
 """End-to-end MCP protocol coverage through FastMCP's in-memory Client."""
 
 from collections.abc import AsyncIterator
-from typing import NewType
+from typing import Literal, NewType
 
 import pytest
 from dishka import Provider, Scope, make_async_container, provide
@@ -41,8 +41,12 @@ class EndToEndProvider(Provider):
             self.request_finalized += 1
 
 
+# 'auto' negotiates the sessionless 2026-07-28 era; 'legacy' keeps the handshake.
+@pytest.mark.parametrize('mode', ['auto', 'legacy'])
 @pytest.mark.asyncio
-async def test_client_protocol_runs_injection_and_finalizes_all_scopes() -> None:
+async def test_client_protocol_runs_injection_and_finalizes_all_scopes(
+    mode: Literal['auto', 'legacy'],
+) -> None:
     provider = EndToEndProvider()
     container = make_async_container(provider, FastMCPProvider())
     mcp = FastMCP('end-to-end', lifespan=dishka_lifespan(container))
@@ -74,9 +78,10 @@ async def test_client_protocol_runs_injection_and_finalizes_all_scopes() -> None
     ) -> str:
         return f'{app}:{request}'
 
-    async with Client(mcp) as client:
+    async with Client(mcp, mode=mode) as client:
+        assert (client.initialize_result is None) == (mode == 'auto')
         tools = await client.list_tools()
-        assert tools[0].inputSchema['properties'].keys() == {'value'}
+        assert tools[0].input_schema['properties'].keys() == {'value'}
 
         tool_result = await client.call_tool('tool', {'value': 'value'})
         resource_result = await client.read_resource('data://end-to-end')

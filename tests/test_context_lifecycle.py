@@ -2,6 +2,7 @@
 
 import asyncio
 import gc
+import sys
 import weakref
 from collections.abc import AsyncIterator, Generator, Iterator
 from types import coroutine
@@ -9,7 +10,9 @@ from typing import NewType
 
 import pytest
 from dishka import Provider, Scope, make_async_container, make_container, provide
-from fastmcp import Context, FastMCP
+from fastmcp import Client, Context, FastMCP
+from fastmcp.exceptions import ToolError
+from fastmcp_tasks import TasksExtension
 from mcp.types import TextContent
 
 from dishka_fastmcp import FastMCPProvider, FromDishka, inject, setup_dishka
@@ -647,13 +650,65 @@ def test_setup_is_idempotent_for_same_container_and_rejects_a_different_one() ->
         second.close()
 
 
-def test_background_task_context_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
-    def task_context() -> object:
-        return object()
+@pytest.mark.asyncio
+async def test_background_task_handler_is_rejected_in_the_worker() -> None:
+    container = make_async_container(AsyncResourceProvider())
+    mcp = FastMCP('test', mask_error_details=False)
+    mcp.add_extension(TasksExtension())
+    setup_dishka(container, mcp)
 
-    monkeypatch.setattr(
-        'dishka_fastmcp._container.get_task_context',
-        task_context,
-    )
-    with pytest.raises(DishkaFastMCPError, match='background tasks'):
-        get_async_container((), {})
+    @mcp.tool(task=True)
+    @inject
+    async def background(resource: FromDishka[RequestResource]) -> str:
+        return resource
+
+    # The worker builds a Context for a handler that asks for one, so injection
+    # would otherwise get far enough to run there.
+    @mcp.tool(task=True)
+    @inject
+    async def background_with_context(
+        ctx: Context,
+        resource: FromDishka[RequestResource],
+    ) -> str:
+        del ctx
+        return resource
+
+    @mcp.tool
+    @inject
+    async def foreground(resource: FromDishka[RequestResource]) -> str:
+        return resource
+
+    try:
+        async with Client(mcp) as client:
+            for name in ('background', 'background_with_context'):
+                with pytest.raises(ToolError, match='background tasks'):
+                    await client.call_tool(name)
+            result = await client.call_tool('foreground')
+        block = result.content[0]
+        assert isinstance(block, TextContent)
+        assert block.text == 'resource'
+    finally:
+        await container.close()
+
+
+@pytest.mark.asyncio
+async def test_injection_works_when_fastmcp_tasks_is_not_loaded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delitem(sys.modules, 'fastmcp_tasks.context', raising=False)
+    container = make_async_container(AsyncResourceProvider())
+    mcp = FastMCP('test')
+    setup_dishka(container, mcp)
+
+    @mcp.tool
+    @inject
+    async def work(resource: FromDishka[RequestResource]) -> str:
+        return resource
+
+    try:
+        result = await mcp.call_tool('work')
+        block = result.content[0]
+        assert isinstance(block, TextContent)
+        assert block.text == 'resource'
+    finally:
+        await container.close()
