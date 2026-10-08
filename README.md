@@ -4,15 +4,16 @@
 
 | Name                            |    Stmts |     Miss |   Branch |   BrPart |    Cover |   Missing |
 |-------------------------------- | -------: | -------: | -------: | -------: | -------: | --------: |
-| dishka\_fastmcp/\_\_init\_\_.py |        9 |        0 |        0 |        0 |     100% |           |
-| dishka\_fastmcp/\_container.py  |       69 |        0 |       16 |        0 |     100% |           |
-| dishka\_fastmcp/\_inject.py     |       75 |        0 |       26 |        0 |     100% |           |
+| dishka\_fastmcp/\_\_init\_\_.py |       11 |        0 |        0 |        0 |     100% |           |
+| dishka\_fastmcp/\_container.py  |      104 |        0 |       26 |        0 |     100% |           |
+| dishka\_fastmcp/\_inject.py     |       99 |        0 |       32 |        0 |     100% |           |
 | dishka\_fastmcp/exceptions.py   |        2 |        0 |        0 |        0 |     100% |           |
 | dishka\_fastmcp/lifespan.py     |       25 |        0 |        8 |        0 |     100% |           |
+| dishka\_fastmcp/middleware.py   |       37 |        0 |        8 |        0 |     100% |           |
 | dishka\_fastmcp/providers.py    |        6 |        0 |        0 |        0 |     100% |           |
 | dishka\_fastmcp/setup.py        |        6 |        0 |        0 |        0 |     100% |           |
 | dishka\_fastmcp/version.py      |        3 |        0 |        0 |        0 |     100% |           |
-| **TOTAL**                       |  **195** |    **0** |   **50** |    **0** | **100%** |           |
+| **TOTAL**                       |  **293** |    **0** |   **74** |    **0** | **100%** |           |
 
 
 ## Setup coverage badge
