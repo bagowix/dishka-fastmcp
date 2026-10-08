@@ -37,7 +37,11 @@ finalized.
 ## `dishka_lifespan`
 
 ```python
-dishka_lifespan(container) -> Callable[..., AbstractAsyncContextManager[dict[str, Any]]]
+dishka_lifespan(
+    container,
+    *,
+    close: bool = True,
+) -> Callable[..., AbstractAsyncContextManager[dict[str, Any]]]
 ```
 
 Returns a FastMCP lifespan that registers the container for the application on
@@ -49,6 +53,11 @@ lifespan with other FastMCP lifespans using
 `fastmcp.utilities.lifespan.combine_lifespans`. On startup it raises
 `DishkaFastMCPError` if `setup_dishka` registered a different container for the
 app.
+
+With `close=False` the lifespan registers the container and publishes it in the
+same way, but leaves closing it to the container's owner, and a registration
+made by `setup_dishka` survives the shutdown. See
+[Sharing the container](lifecycle.md#sharing-the-container).
 
 ## `FastMCPProvider`
 

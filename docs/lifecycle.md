@@ -52,7 +52,9 @@ setup_dishka(container, mcp)
 
 `combine_lifespans` enters lifespans in argument order and exits them in reverse
 order. Placing `dishka_lifespan` last closes the Dishka container before the
-other lifespan releases its resources.
+other lifespan releases its resources, which suits providers that depend on
+those resources. When the other lifespan uses the container instead, list
+`dishka_lifespan` first; see [Sharing the container](#sharing-the-container).
 
 The combined lifespan above belongs to a `FastMCP` instance. When composing
 FastMCP with FastAPI or Starlette, keep `dishka_lifespan` on the FastMCP server
@@ -84,6 +86,42 @@ Do not combine `dishka_lifespan(first_container)` and
 `dishka_lifespan(second_container)` directly at the ASGI layer:
 `combine_lifespans` passes the same ASGI application to every lifespan. Each
 `mcp.http_app().lifespan` adapter preserves the corresponding FastMCP instance.
+
+## Sharing the container
+
+`dishka_lifespan` closes the container when the FastMCP server stops. If the
+same container also serves a FastAPI application, a FastStream broker, a
+background worker or a test session, those components must be done with it by
+then. Dishka raises no error on `get()` after `close()`: it creates the
+`Scope.APP` dependencies again. Code that runs after the close silently opens
+new resources, and they leak unless the container is closed once more.
+
+When the other component's lifespan is combined with the FastMCP one, list the
+FastMCP lifespan first. `combine_lifespans` exits lifespans in reverse order, so
+the container closes after the other component has shut down:
+
+```python
+mcp_app = mcp.http_app(path='/')
+app = FastAPI(lifespan=combine_lifespans(mcp_app.lifespan, app_lifespan))
+app.mount('/mcp', mcp_app)
+```
+
+FastMCP's FastAPI guide lists `app_lifespan` first. With that order the
+container is already closed while `app_lifespan` shuts down.
+
+When the container belongs to something else, pass `close=False`. The lifespan
+still registers the container and hands it to mounted routers, and the owner
+closes it. A registration made by `setup_dishka` survives the shutdown, so
+direct `call_tool()` calls keep working between sessions:
+
+```python
+mcp = FastMCP('app', lifespan=dishka_lifespan(container, close=False))
+```
+
+Ordering cannot help when the owner's lifecycle runs outside this
+`combine_lifespans` call: a FastStream application, a worker process loop, or a
+pytest fixture that shares one container across several `Client(server)`
+sessions. Use `close=False` there.
 
 ## Mounted servers
 

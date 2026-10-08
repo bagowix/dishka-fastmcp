@@ -61,6 +61,55 @@ async def test_lifespan_closes_async_container() -> None:
 
 
 @pytest.mark.asyncio
+async def test_lifespan_with_close_false_leaves_the_container_to_its_owner() -> None:
+    provider = AsyncResourceProvider()
+    container = make_async_container(provider)
+    mcp = FastMCP('t')
+    async with container() as request:
+        await request.get(AppResource)
+
+    async with dishka_lifespan(container, close=False)(mcp) as state:
+        assert state == {LIFESPAN_STATE_KEY: container}
+        assert get_registered_container(mcp) is container
+
+    assert not provider.closed
+    assert get_registered_container(mcp) is None
+    await container.close()
+    assert provider.closed
+
+
+@pytest.mark.asyncio
+async def test_lifespan_with_close_false_keeps_the_setup_dishka_registration() -> None:
+    container = make_container()
+    mcp = FastMCP('t')
+    setup_dishka(container, mcp)
+
+    for _ in range(2):
+        async with dishka_lifespan(container, close=False)(mcp):
+            pass
+        assert get_registered_container(mcp) is container
+
+    container.close()
+
+
+@pytest.mark.asyncio
+async def test_lifespans_sharing_a_container_on_one_app_shut_down_cleanly() -> None:
+    provider = AsyncResourceProvider()
+    container = make_async_container(provider)
+    mcp = FastMCP('t')
+    combined = combine_lifespans(
+        dishka_lifespan(container, close=False),
+        dishka_lifespan(container),
+    )
+
+    async with combined(mcp), container() as request:
+        await request.get(AppResource)
+
+    assert provider.closed
+    assert get_registered_container(mcp) is None
+
+
+@pytest.mark.asyncio
 async def test_lifespan_rejects_container_other_than_the_registered_one() -> None:
     mcp = FastMCP('t')
     registered = make_container()

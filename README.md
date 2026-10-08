@@ -107,6 +107,13 @@ FastMCP servers hosted by one ASGI application, combine each
 `mcp.http_app().lifespan`; see
 [Lifecycle and scopes](https://bagowix.github.io/dishka-fastmcp/lifecycle/).
 
+If the same container also serves FastAPI, FastStream, a worker or a test
+session, the MCP server must not close it while they still use it. List
+`mcp_app.lifespan` first in `combine_lifespans`, or pass
+`dishka_lifespan(container, close=False)` and close the container where it is
+owned; see
+[Sharing the container](https://bagowix.github.io/dishka-fastmcp/lifecycle/#sharing-the-container).
+
 FastMCP may execute regular sync handlers on different worker threads. Consequently,
 `Scope.APP` dependencies in a sync container must be thread-safe and their
 cleanup must not require the thread that created them. Put thread-affine resources

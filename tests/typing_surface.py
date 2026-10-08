@@ -47,6 +47,9 @@ async_lifespan: Callable[[FastMCP[Any]], AbstractAsyncContextManager[dict[str, A
 sync_lifespan: Callable[[FastMCP[Any]], AbstractAsyncContextManager[dict[str, Any]]] = (
     dishka_lifespan(sync_container)
 )
+borrowed_lifespan: Callable[[FastMCP[Any]], AbstractAsyncContextManager[dict[str, Any]]] = (
+    dishka_lifespan(async_container, close=False)
+)
 lifespan_server: FastMCP[Any] = FastMCP('typed', lifespan=dishka_lifespan(async_container))
 combined_lifespan: Callable[
     [FastMCP[Any]],

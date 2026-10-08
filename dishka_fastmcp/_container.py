@@ -66,9 +66,9 @@ def register_container(container: AsyncContainer | Container, app: FastMCP) -> N
 
 
 def unregister_container(app: FastMCP) -> None:
-    """Drop the container registered for ``app``."""
+    """Drop the container registered for ``app``, if any."""
     with _register_lock:
-        delattr(app, _ATTR)
+        vars(app).pop(_ATTR, None)
 
 
 def _serving_container() -> AsyncContainer | Container | None:

@@ -20,20 +20,27 @@ __all__ = ('dishka_lifespan',)
 
 def dishka_lifespan(
     container: AsyncContainer | Container,
+    *,
+    close: bool = True,
 ) -> Callable[[FastMCP[Any]], AbstractAsyncContextManager[dict[str, Any]]]:
-    """Build a FastMCP lifespan that closes ``container`` on shutdown.
+    """Build a FastMCP lifespan that publishes ``container`` and closes it on shutdown.
 
-    Pass the result to ``FastMCP(lifespan=...)``. On shutdown the root container
-    is closed, finalizing every ``Scope.APP`` provider. Works with both an
+    Pass the result to ``FastMCP(lifespan=...)``. On startup the lifespan
+    registers ``container`` for the app, as ``setup_dishka`` does, and its
+    lifespan state carries the container, so servers mounted into this one
+    resolve their dependencies from it during the MCP requests it serves. Combine
+    it with other dict-yielding lifespans through ``combine_lifespans``.
+
+    On shutdown the root container is closed, finalizing every ``Scope.APP``
+    provider, and the registration is dropped. Works with both an
     ``AsyncContainer`` and a sync ``Container``. APP-scoped dependencies in a
     sync container must be thread-safe and have thread-independent cleanup;
     thread-affine resources belong in ``Scope.REQUEST``.
 
-    On startup the lifespan registers ``container`` for the app, as
-    ``setup_dishka`` does, and its lifespan state carries the container, so
-    servers mounted into this one resolve their dependencies from it during the
-    MCP requests it serves. Combine it with other dict-yielding lifespans through
-    ``combine_lifespans``.
+    Pass ``close=False`` when something else owns the container, such as a web
+    application, a worker or a test fixture that outlives the server. The owner
+    then closes the container, and a registration made by ``setup_dishka``
+    survives the shutdown.
 
     On startup the lifespan raises :class:`DishkaFastMCPError` if ``setup_dishka``
     registered a *different* container for the app — otherwise the registered one
@@ -53,11 +60,13 @@ def dishka_lifespan(
             yield {LIFESPAN_STATE_KEY: container}
         finally:
             try:
-                if isinstance(container, AsyncContainer):
-                    await container.close()
-                else:
-                    container.close()
+                if close:
+                    if isinstance(container, AsyncContainer):
+                        await container.close()
+                    else:
+                        container.close()
             finally:
-                unregister_container(app)
+                if close or registered is None:
+                    unregister_container(app)
 
     return lifespan

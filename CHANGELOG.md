@@ -21,6 +21,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `server.call_tool()` outside a request still reaches only the server's own
   components, so test mounted routers through `Client(server)`. A server behind
   `create_proxy` needs its own `setup_dishka`.
+- `dishka_lifespan(container, close=False)` leaves closing the container to its
+  owner. Use it when the container is shared with FastAPI, FastStream, a worker
+  or a test session. Mounted routers find the container only through
+  `dishka_lifespan`, so before this option such an application had to let the
+  MCP server close the shared container on shutdown. With `close=False` the
+  lifespan still registers the container and hands it to mounted routers, and a
+  registration made by `setup_dishka` survives the shutdown.
+- The lifecycle guide now covers the lifespan order for a shared container.
+  FastMCP's FastAPI guide combines `app_lifespan` before `mcp_app.lifespan`, so
+  the container closes first and `app_lifespan` shuts down against a closed
+  container. Dishka raises no error there: it creates the `Scope.APP`
+  dependencies again, and they leak unless the container is closed once more.
+  List `mcp_app.lifespan` first, or pass `close=False` and close the container
+  where it is owned.
 
 ### Changed
 
