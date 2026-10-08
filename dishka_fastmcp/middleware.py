@@ -64,10 +64,10 @@ class DishkaMiddleware(Middleware):
     Put it first in ``FastMCP(middleware=[...])`` so that the middleware after it
     sees the scope. List requests, reads and prompt renders get one as well, so
     dynamic component providers and other middleware can resolve REQUEST
-    dependencies through ``get_request_container()``. ``@inject`` handlers share
-    the scope instead of opening their own, and it is finalized once, when the
-    rest of the request is done and before the response goes out. Notifications
-    get no scope.
+    dependencies through ``get_request_container()``. Async ``@inject`` handlers
+    share the scope instead of opening their own, and it is finalized once, when
+    the rest of the request is done and before the response goes out.
+    Notifications get no scope.
 
     The root container is found as for ``@inject``: registered by
     ``setup_dishka`` on the server, or put into the lifespan state of the server

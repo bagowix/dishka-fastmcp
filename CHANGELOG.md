@@ -15,17 +15,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   dependency type known only at runtime, and middleware had no REQUEST
   dependencies. Put `DishkaMiddleware()` first in `FastMCP(middleware=[...])`:
   every request, list requests and the handshake included, gets a scope, and
-  `@inject` handlers share it, so each REQUEST dependency has one instance per
-  request, finalized once before the response goes out. Mounted routers at any depth share
-  it too. If you open the scope in a middleware of your own and keep the request
-  container in a ContextVar, replace that middleware with `DishkaMiddleware`.
-  Without the middleware nothing changes.
+  async `@inject` handlers share it, so each REQUEST dependency has one instance
+  per request, finalized once before the response goes out. Mounted routers at
+  any depth share it too. If you open the scope in a middleware of your own and
+  keep the request container in a ContextVar, replace that middleware with
+  `DishkaMiddleware`. Without the middleware nothing changes.
 - The middleware needs an `AsyncContainer`. Sync handlers keep their own
   worker-thread scope, a router set up with a different container keeps its own
   scopes and gets no request container, and `task=True` workers get no scope.
   FastMCP also lists component providers outside any request, on startup, and
-  runs completion and extension-method handlers outside the scope; `get_request_container()` raises `DishkaFastMCPError` there, so a
-  provider returns no components on startup. The name `DishkaMiddleware`
+  runs completion and extension-method handlers outside the scope;
+  `get_request_container()` raises `DishkaFastMCPError` there, so a provider
+  returns no components on startup. The name `DishkaMiddleware`
   belonged to a different class removed in 2.0.0, which only carried the root
   container; the new one owns the request scope.
 - Three things behave differently once you add the middleware. The scope

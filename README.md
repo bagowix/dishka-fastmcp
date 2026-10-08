@@ -175,10 +175,10 @@ raises a clear error.
 ## Return values
 
 An ordinary `def` or `async def` handler must return its completed value.
-Returning an awaitable, generator, or async generator is rejected because that
-work would outlive its REQUEST scope. FastMCP tool handlers defined directly as
-sync or async generator functions are supported; their scope stays open for the
-whole iteration.
+Returning an awaitable, generator, or async generator is rejected: FastMCP would
+run that work after the handler returns, when its REQUEST scope may already be
+finalized. FastMCP tool handlers defined directly as sync or async generator
+functions are supported; their scope stays open for the whole iteration.
 
 ## Accessing FastMCP objects
 
@@ -222,9 +222,9 @@ async def current_user() -> User:
     return await get_request_container().get(User)
 ```
 
-Every request then gets one scope, list requests included, shared by `@inject`
-handlers and finalized once before the response goes out. It needs an `AsyncContainer`.
-Without the middleware nothing changes; see
+Every request then gets one scope, list requests included, shared by async
+`@inject` handlers and finalized once before the response goes out. It needs an
+`AsyncContainer`. Without the middleware nothing changes; see
 [Request scope for the whole MCP request](https://bagowix.github.io/dishka-fastmcp/lifecycle/#request-scope-for-the-whole-mcp-request)
 for the rules.
 

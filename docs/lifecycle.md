@@ -203,7 +203,8 @@ The rules that follow from it:
   `setup_dishka`.
 
 `Context` and `FastMCP` from `FastMCPProvider` still describe the mounted server
-that owns the executing component.
+that owns the executing component, unless `DishkaMiddleware` opened the scope;
+see [Request scope for the whole MCP request](#request-scope-for-the-whole-mcp-request).
 
 ## Request scope for the whole MCP request
 
@@ -250,10 +251,11 @@ With it:
   scope.
 - Every request gets a scope: tool calls, list requests, resource reads, prompt
   renders, the handshake (`initialize` or `server/discover`) and `ping`. The
-  scope is lazy, so a request that resolves nothing creates nothing.
+  scope is lazy, so a request that resolves nothing creates no dependencies.
   Notifications get no scope.
-- `@inject` handlers share the scope, so each REQUEST dependency has one instance
-  per request, also when providers of one request resolve it concurrently. The
+- Async `@inject` handlers share the scope, so each REQUEST dependency has one
+  instance per request, also when providers of one request resolve it
+  concurrently. The
   scope is finalized once, when the rest of the request is done and before the
   response goes out, so a slow finalizer delays the response. An exception from
   a handler closes it and propagates unchanged.
@@ -272,7 +274,8 @@ With it:
   scope. FastMCP lists component providers outside any request, for example on
   startup to collect background-task components, so a provider returns no
   components there, as above. Completion and extension-method handlers run
-  without the scope too: FastMCP gives them a fresh request context. A task a handler spawns loses the scope once the request is served.
+  without the scope too: FastMCP gives them a fresh request context. A task a
+  handler spawns loses the scope once the request is served.
 - A tool built as `FunctionTool(fn=call, parameters=...)` resolves its runtime
   dependency with `await get_request_container().get(dependency_type)`. The
   container belongs to the event loop: a sync `call`, which FastMCP runs in a
