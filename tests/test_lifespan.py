@@ -8,6 +8,7 @@ import pytest
 from dishka import Provider, Scope, make_async_container, make_container, provide
 from dishka.exceptions import ExitError
 from fastmcp import FastMCP
+from fastmcp.server.lifespan import lifespan as fastmcp_lifespan
 from fastmcp.utilities.lifespan import combine_lifespans
 from starlette.applications import Starlette
 
@@ -61,14 +62,14 @@ async def test_lifespan_closes_async_container() -> None:
 
 
 @pytest.mark.asyncio
-async def test_lifespan_with_close_false_leaves_the_container_to_its_owner() -> None:
+async def test_lifespan_without_finalizing_leaves_the_container_to_its_owner() -> None:
     provider = AsyncResourceProvider()
     container = make_async_container(provider)
     mcp = FastMCP('t')
     async with container() as request:
         await request.get(AppResource)
 
-    async with dishka_lifespan(container, close=False)(mcp) as state:
+    async with dishka_lifespan(container, finalize_container=False)(mcp) as state:
         assert state == {LIFESPAN_STATE_KEY: container}
         assert get_registered_container(mcp) is container
 
@@ -79,13 +80,13 @@ async def test_lifespan_with_close_false_leaves_the_container_to_its_owner() -> 
 
 
 @pytest.mark.asyncio
-async def test_lifespan_with_close_false_keeps_the_setup_dishka_registration() -> None:
+async def test_lifespan_without_finalizing_keeps_the_setup_dishka_registration() -> None:
     container = make_container()
     mcp = FastMCP('t')
     setup_dishka(container, mcp)
 
     for _ in range(2):
-        async with dishka_lifespan(container, close=False)(mcp):
+        async with dishka_lifespan(container, finalize_container=False)(mcp):
             pass
         assert get_registered_container(mcp) is container
 
@@ -98,7 +99,7 @@ async def test_lifespans_sharing_a_container_on_one_app_shut_down_cleanly() -> N
     container = make_async_container(provider)
     mcp = FastMCP('t')
     combined = combine_lifespans(
-        dishka_lifespan(container, close=False),
+        dishka_lifespan(container, finalize_container=False),
         dishka_lifespan(container),
     )
 
@@ -209,6 +210,30 @@ async def test_lifespan_works_with_fastmcp_combine_lifespans() -> None:
         'application-started',
         'application-stopped:container-closed=True',
     ]
+    assert get_registered_container(mcp) is None
+
+
+@pytest.mark.asyncio
+async def test_lifespan_composes_with_a_fastmcp_pipe_in_order() -> None:
+    provider = AsyncResourceProvider()
+    container = make_async_container(provider)
+    mcp = FastMCP('t')
+    events: list[str] = []
+
+    @fastmcp_lifespan
+    async def database(_: FastMCP) -> AsyncIterator[dict[str, bool]]:
+        events.append('database-started')
+        yield {'database': True}
+        events.append(f'database-stopped:container-closed={provider.closed}')
+
+    async with container() as request:
+        await request.get(AppResource)
+
+    async with (database | dishka_lifespan(container))(mcp) as state:
+        assert state == {'database': True, LIFESPAN_STATE_KEY: container}
+        assert get_registered_container(mcp) is container
+
+    assert events == ['database-started', 'database-stopped:container-closed=True']
     assert get_registered_container(mcp) is None
 
 

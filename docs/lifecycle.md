@@ -58,12 +58,14 @@ other lifespan releases its resources, which suits providers that depend on
 those resources. When the other lifespan uses the container instead, list
 `dishka_lifespan` first; see [Sharing the container](#sharing-the-container).
 
-FastMCP 4 also composes `@lifespan` functions with `|`. That operator accepts
-only `Lifespan` instances, and `dishka_lifespan` returns a plain context
-manager factory, so wrap it in FastMCP's `ContextManagerLifespan` first:
+`dishka_lifespan` returns a FastMCP `Lifespan`, so it also composes with
+`@lifespan` functions through `|`. The order rules are the same: the left side
+enters first and exits last. `|` accepts only `Lifespan` instances, so a
+lifespan written with `@asynccontextmanager`, like `application_lifespan` above,
+goes through `combine_lifespans` or FastMCP's `ContextManagerLifespan` wrapper.
 
 ```python
-from fastmcp.server.lifespan import ContextManagerLifespan, lifespan
+from fastmcp.server.lifespan import lifespan
 
 
 @lifespan
@@ -71,10 +73,7 @@ async def database(server: FastMCP) -> AsyncIterator[dict[str, object]]:
     yield {'database': await connect()}
 
 
-mcp = FastMCP(
-    'app',
-    lifespan=database | ContextManagerLifespan(dishka_lifespan(container)),
-)
+mcp = FastMCP('app', lifespan=database | dishka_lifespan(container))
 ```
 
 The combined lifespan above belongs to a `FastMCP` instance. When composing
@@ -130,12 +129,13 @@ app.mount('/mcp', mcp_app)
 FastMCP's FastAPI guide lists `app_lifespan` first. With that order the
 container is already closed while `app_lifespan` shuts down.
 
-When the container belongs to something else, pass `close=False`. The lifespan
-still registers the container and hands it to mounted routers, and the owner
-closes it:
+When the container belongs to something else, pass `finalize_container=False`.
+The lifespan still registers the container and hands it to mounted routers,
+and the owner closes it. The name follows `finalize_container` in dishka's own
+integrations; here it defaults to `True`:
 
 ```python
-mcp = FastMCP('app', lifespan=dishka_lifespan(container, close=False))
+mcp = FastMCP('app', lifespan=dishka_lifespan(container, finalize_container=False))
 setup_dishka(container, mcp)
 ```
 
@@ -147,9 +147,9 @@ at that point.
 Ordering cannot help when the owner's lifecycle runs outside this
 `combine_lifespans` call: a FastStream application, a background worker, or a
 test session. Each `async with Client(server)` block starts and stops the
-server, so with the default `close=True` two blocks in a row close the
-container when the first one exits, and the second one silently gets new
-`Scope.APP` dependencies. Use `close=False` there.
+server, so with the default `finalize_container=True` two blocks in a row
+close the container when the first one exits, and the second one silently gets
+new `Scope.APP` dependencies. Use `finalize_container=False` there.
 
 ## Mounted servers
 

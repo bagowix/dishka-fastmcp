@@ -40,8 +40,8 @@ finalized.
 dishka_lifespan(
     container,
     *,
-    close: bool = True,
-) -> Callable[..., AbstractAsyncContextManager[dict[str, Any]]]
+    finalize_container: bool = True,
+) -> fastmcp.server.lifespan.Lifespan
 ```
 
 Returns a FastMCP lifespan that registers the container for the application on
@@ -49,15 +49,15 @@ startup, as `setup_dishka` does. By default it also closes the async or sync
 container and removes the registration on shutdown. Its lifespan state is
 `{'dishka_fastmcp.container': container}`, which is how servers mounted into the
 application find the container during the MCP requests it serves. Compose this
-lifespan with other FastMCP lifespans using
-`fastmcp.utilities.lifespan.combine_lifespans`, or wrap it in
-`fastmcp.server.lifespan.ContextManagerLifespan` to compose it with `|`. On
-startup it raises `DishkaFastMCPError` if `setup_dishka` registered a different
-container for the app.
+lifespan with `@lifespan` functions through `|`, or with other lifespans using
+`fastmcp.utilities.lifespan.combine_lifespans`. On startup it raises
+`DishkaFastMCPError` if a different container is already registered for the
+app, by `setup_dishka` or by another `dishka_lifespan`.
 
-With `close=False` the lifespan registers the container and publishes it in the
-same way, but leaves closing it to the container's owner, and a registration
-that `setup_dishka` made before startup survives the shutdown. See
+With `finalize_container=False` the lifespan registers the container and
+publishes it in the same way, but leaves closing it to the container's owner,
+and a registration that `setup_dishka` made before startup survives the
+shutdown. See
 [Sharing the container](lifecycle.md#sharing-the-container).
 
 ## `FastMCPProvider`

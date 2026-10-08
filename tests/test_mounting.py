@@ -19,6 +19,7 @@ from dishka import (
 from fastmcp import Client, FastMCP
 from fastmcp.exceptions import ToolError
 from fastmcp.server import create_proxy
+from fastmcp.server.lifespan import lifespan as fastmcp_lifespan
 from fastmcp.utilities.lifespan import combine_lifespans
 from mcp.types import TextContent
 
@@ -304,6 +305,20 @@ async def test_dishka_lifespan_combined_with_another_serves_mounted_routers() ->
     container = make_async_container(LabelProvider('root'))
     server = FastMCP('root', lifespan=combine_lifespans(database, dishka_lifespan(container)))
     setup_dishka(container, server)
+    server.mount(labelled_router())
+
+    async with Client(server) as client:
+        assert await call_text(client, 'whoami') == 'root'
+
+
+@pytest.mark.asyncio
+async def test_dishka_lifespan_composed_with_a_fastmcp_pipe_serves_mounted_routers() -> None:
+    @fastmcp_lifespan
+    async def database(_: FastMCP) -> AsyncIterator[dict[str, str]]:
+        yield {'database': 'pool'}
+
+    container = make_async_container(LabelProvider('root'))
+    server = FastMCP('root', lifespan=database | dishka_lifespan(container))
     server.mount(labelled_router())
 
     async with Client(server) as client:

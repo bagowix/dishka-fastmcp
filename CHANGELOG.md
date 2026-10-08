@@ -21,20 +21,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `server.call_tool()` outside a request still reaches only the server's own
   components, so test mounted routers through `Client(server)`. A server behind
   `create_proxy` needs its own `setup_dishka`.
-- `dishka_lifespan(container, close=False)` leaves closing the container to its
-  owner. Use it when the container is shared with FastAPI, FastStream, a worker
-  or a test session. Routers without a container of their own get the root's
-  container only through `dishka_lifespan`, which otherwise closes it when the
-  MCP server stops. With `close=False` the lifespan still registers the
-  container and hands it to mounted routers, and a registration that
-  `setup_dishka` made before startup survives the shutdown.
+- `dishka_lifespan(container, finalize_container=False)` leaves closing the
+  container to its owner. The name follows `finalize_container` in dishka's own
+  integrations, and it defaults to `True`, so the lifespan keeps closing the
+  container unless told otherwise. Use it when the container is shared with
+  FastAPI, FastStream, a worker or a test session. Routers without a container
+  of their own get the root's container only through `dishka_lifespan`, which
+  otherwise closes it when the MCP server stops. With `finalize_container=False`
+  the lifespan still registers the container and hands it to mounted routers,
+  and a registration that `setup_dishka` made before startup survives the
+  shutdown.
 - The lifecycle guide now covers the lifespan order for a shared container.
   FastMCP's FastAPI guide combines `app_lifespan` before `mcp_app.lifespan`, so
   the container closes first and `app_lifespan` shuts down against a closed
   container. Dishka raises no error there: it creates the `Scope.APP`
   dependencies again, and they leak unless the container is closed once more.
-  List `mcp_app.lifespan` first, or pass `close=False` and close the container
-  where it is owned.
+  List `mcp_app.lifespan` first, or pass `finalize_container=False` and close the
+  container where it is owned.
 
 ### Changed
 
@@ -46,12 +49,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   arguments; the return type of `dishka_lifespan` changed (see below). Injection
   works on both protocol eras FastMCP 4 speaks: the sessionless 2026-07-28 era
   its `Client` negotiates by default, and the legacy handshake.
-- `dishka_lifespan` now yields `{'dishka_fastmcp.container': container}` as the
-  server's lifespan state, so its type is
-  `Callable[[FastMCP], AbstractAsyncContextManager[dict[str, Any]]]`. Code that
-  annotated it with `AbstractAsyncContextManager[None]` needs the new type; it
-  still composes through `combine_lifespans` with lifespans that yield a mapping
-  or `None`.
+- `dishka_lifespan` now returns a FastMCP `Lifespan`
+  (`fastmcp.server.lifespan.Lifespan`) whose lifespan state is
+  `{'dishka_fastmcp.container': container}`. It composes with `@lifespan`
+  functions through `|`, and through `combine_lifespans` with lifespans that
+  yield a mapping or `None`. To use `|` with an `@asynccontextmanager` lifespan,
+  wrap that lifespan in FastMCP's `ContextManagerLifespan`. A `Lifespan` is
+  still called with the server and returns an async context manager, so an
+  annotation such as
+  `Callable[[FastMCP], AbstractAsyncContextManager[dict[str, Any]]]` accepts it.
+  Code that annotated it with `AbstractAsyncContextManager[None]` should
+  annotate it as `Lifespan` or as that `Callable` instead.
 - `dishka_lifespan` now also registers its container for the application on
   startup, as `setup_dishka` does. A server whose lifespan includes it resolves
   its own components during MCP requests even without `setup_dishka`; keep

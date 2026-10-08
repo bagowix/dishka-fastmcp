@@ -103,7 +103,8 @@ boundary, session-scoped resources could not be finalized reliably.
 container. `dishka_lifespan(container)` — used in the example above — closes it
 (async or sync) and removes its application registration when the server stops,
 finalizing every `Scope.APP` provider. If you already have a lifespan, compose
-it with `dishka_lifespan` using FastMCP's `combine_lifespans`. For multiple
+it with `dishka_lifespan` using FastMCP's `combine_lifespans`, or through `|`
+when it is a FastMCP `@lifespan` function. For multiple
 FastMCP servers hosted by one ASGI application, combine each
 `mcp.http_app().lifespan`; see
 [Lifecycle and scopes](https://bagowix.github.io/dishka-fastmcp/lifecycle/).
@@ -111,8 +112,8 @@ FastMCP servers hosted by one ASGI application, combine each
 If the same container also serves FastAPI, FastStream, a worker or a test
 session, the MCP server must not close it while they still use it. List
 `mcp.http_app().lifespan` first in `combine_lifespans`, or pass
-`dishka_lifespan(container, close=False)` and close the container where it is
-owned; see
+`dishka_lifespan(container, finalize_container=False)` and close the container
+where it is owned; see
 [Sharing the container](https://bagowix.github.io/dishka-fastmcp/lifecycle/#sharing-the-container).
 
 FastMCP may execute regular sync handlers on different worker threads. Consequently,

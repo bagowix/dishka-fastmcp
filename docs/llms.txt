@@ -38,8 +38,9 @@ Python 3.11+, `dishka>=1.10.1`, `fastmcp>=4.0.0,<5`.
   helper with an existing lifespan so shutdown also removes the container's
   application registration. If the container is shared with FastAPI, FastStream,
   a worker or a test session, list `mcp.http_app().lifespan` first in
-  `combine_lifespans`, or pass `dishka_lifespan(container, close=False)` and
-  close it where it is owned. Dishka re-creates APP dependencies on `get()` after
+  `combine_lifespans`, or pass
+  `dishka_lifespan(container, finalize_container=False)` and close it where it
+  is owned. Dishka re-creates APP dependencies on `get()` after
   `close()` without an error, so with a wrong order shutdown code silently opens
   new resources, which leak unless the container is closed again.
 - **Sync `Scope.APP` dependencies must be thread-safe.** FastMCP may use different
@@ -62,9 +63,11 @@ Python 3.11+, `dishka>=1.10.1`, `fastmcp>=4.0.0,<5`.
 - `FastMCPProvider()` — add to the container to inject the current request's
   `fastmcp.Context` or `fastmcp.FastMCP` via dishka's `from_context`. Operation
   arguments remain regular tool, resource, or prompt parameters.
-- `dishka_lifespan(container, *, close=True)` — build a `FastMCP` lifespan that
-  registers the container, hands it to mounted routers and closes it (async or
-  sync) on shutdown; `close=False` leaves closing to the container's owner.
+- `dishka_lifespan(container, *, finalize_container=True)` — build a FastMCP
+  `Lifespan` that registers the container, hands it to mounted routers and
+  closes it (async or sync) on shutdown; `finalize_container=False` leaves
+  closing to the container's owner. Compose it with `combine_lifespans`, or with
+  `|` when the other lifespan is a FastMCP `@lifespan` function.
 - `DishkaFastMCPError` — raised on integration misuse: a missing or wrong-kind
   container, a different container already registered for the app, a returned
   awaitable or generator, or injection inside a `task=True` worker.

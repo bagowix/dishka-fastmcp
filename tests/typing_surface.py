@@ -4,12 +4,13 @@ Checked by mypy and pyright in strict mode (see ``pyproject.toml``); pytest does
 not collect this module. If the public types regress, these assignments fail.
 """
 
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
 from typing import Any
 
 from dishka import AsyncContainer, Container, make_async_container, make_container
 from fastmcp import FastMCP
+from fastmcp.server.lifespan import Lifespan, lifespan
 from fastmcp.utilities.lifespan import combine_lifespans
 
 from dishka_fastmcp import FromDishka, dishka_lifespan, inject, setup_dishka
@@ -48,10 +49,20 @@ sync_lifespan: Callable[[FastMCP[Any]], AbstractAsyncContextManager[dict[str, An
     dishka_lifespan(sync_container)
 )
 borrowed_lifespan: Callable[[FastMCP[Any]], AbstractAsyncContextManager[dict[str, Any]]] = (
-    dishka_lifespan(async_container, close=False)
+    dishka_lifespan(async_container, finalize_container=False)
 )
 lifespan_server: FastMCP[Any] = FastMCP('typed', lifespan=dishka_lifespan(async_container))
 combined_lifespan: Callable[
     [FastMCP[Any]],
     AbstractAsyncContextManager[dict[str, Any]],
 ] = combine_lifespans(dishka_lifespan(async_container))
+
+
+@lifespan
+async def database(_: FastMCP[Any]) -> AsyncIterator[dict[str, Any]]:
+    yield {}
+
+
+# It is a FastMCP Lifespan, so it composes with @lifespan functions through |.
+native_lifespan: Lifespan = dishka_lifespan(async_container)
+piped_lifespan: Lifespan = database | dishka_lifespan(async_container)
