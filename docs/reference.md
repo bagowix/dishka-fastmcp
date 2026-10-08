@@ -21,7 +21,8 @@ async def handler(service: FromDishka[Service]) -> Result: ...
 
 Resolves `FromDishka` parameters, removes them from the public signature, and
 manages one `Scope.REQUEST` around the handler. Sync and async functions are
-detected automatically.
+detected automatically. Under `DishkaMiddleware`, async handlers share the scope
+the middleware opened instead.
 
 FastMCP tools may be sync or async generator functions. Their REQUEST scope
 stays open for the whole iteration. Resources and prompts must use their normal
@@ -29,7 +30,8 @@ FastMCP return types.
 
 An ordinary `def` or `async def` must return its completed value directly.
 Returning an awaitable, generator, or async generator would defer work until
-after the function's REQUEST scope exits, so `@inject` raises
+after the function returns, when its REQUEST scope may already be finalized, so
+`@inject` raises
 `DishkaFastMCPError`. Coroutine-like objects are closed during rejection;
 returned `asyncio.Task` instances are cancelled and awaited before the scope is
 finalized.
@@ -60,6 +62,31 @@ and a registration that `setup_dishka` made before startup survives the
 shutdown. See
 [Sharing the container](lifecycle.md#sharing-the-container).
 
+## `DishkaMiddleware`
+
+```python
+FastMCP('app', middleware=[DishkaMiddleware(), ...])
+```
+
+A FastMCP middleware that opens `Scope.REQUEST` around every MCP request,
+list requests, reads, prompt renders and the handshake included, and finalizes
+it once before the response goes out. Async `@inject` handlers share the scope.
+Put it first in the middleware list. It finds the root container as `@inject`
+does, and the container must be an `AsyncContainer`. See
+[Request scope for the whole MCP request](lifecycle.md#request-scope-for-the-whole-mcp-request).
+
+## `get_request_container`
+
+```python
+get_request_container() -> AsyncContainer
+```
+
+Returns the REQUEST container `DishkaMiddleware` opened for the current MCP
+request, the one async `@inject` handlers share. It raises `DishkaFastMCPError`
+where there is none: without the middleware, outside an MCP request, in
+completion and extension-method handlers, in a `task=True` worker, or on a
+mounted server set up with a container of its own.
+
 ## `FastMCPProvider`
 
 A Dishka provider for the current `fastmcp.Context` and `fastmcp.FastMCP`
@@ -76,5 +103,6 @@ import their entire integration surface from one package.
 Raised for integration misuse: a missing container registration, a container
 type that does not match the handler's sync or async execution model, a
 different container registered for the same application, a deferred result
-returned by an ordinary handler, or injection inside a `task=True` background
-worker.
+returned by an ordinary handler, injection inside a `task=True` background
+worker, `get_request_container()` outside a request scope, or
+`DishkaMiddleware` with a sync container.

@@ -2,14 +2,15 @@
 
 dishka-fastmcp separates FastMCP registration from operation execution. The
 decorator cleans the public signature during registration. At execution time,
-`@inject` resolves the active FastMCP application and owns the request scope.
+`@inject` resolves the active FastMCP application and owns the request scope,
+unless `DishkaMiddleware` opened one for the whole MCP request.
 
 ## Scope boundaries
 
 | Scope | Boundary | Owner |
 |---|---|---|
 | `Scope.APP` | Server lifetime | Root container, closed by `dishka_lifespan` or by its owner |
-| `Scope.REQUEST` | One tool call, resource read, or prompt render | `@inject` |
+| `Scope.REQUEST` | One tool call, resource read, or prompt render; with `DishkaMiddleware`, one MCP request | `@inject`, or `DishkaMiddleware` |
 
 Pass `dishka_lifespan` to the FastMCP server you run. By default it closes the
 container on shutdown, which fits a container the server owns; for a shared
@@ -202,7 +203,117 @@ The rules that follow from it:
   `setup_dishka`.
 
 `Context` and `FastMCP` from `FastMCPProvider` still describe the mounted server
-that owns the executing component.
+that owns the executing component, unless `DishkaMiddleware` opened the scope;
+see [Request scope for the whole MCP request](#request-scope-for-the-whole-mcp-request).
+
+## Request scope for the whole MCP request
+
+`@inject` opens `Scope.REQUEST` around one handler call, so code outside a
+handler has no scope: a dynamic component provider that builds `tools/list` from
+the user and feature flags, a tool assembled from `FunctionTool(fn=...)` whose
+dependency type is only known at runtime, or middleware. Add `DishkaMiddleware`
+to open one scope for the whole MCP request, and reach it through
+`get_request_container()`:
+
+```python
+from collections.abc import Sequence
+
+from fastmcp.server.providers import Provider
+from fastmcp.tools import Tool
+
+from dishka_fastmcp import DishkaFastMCPError, DishkaMiddleware, get_request_container
+
+
+class FeatureTools(Provider):
+    async def _list_tools(self) -> Sequence[Tool]:
+        try:
+            container = get_request_container()
+        except DishkaFastMCPError:
+            return []  # FastMCP also lists components outside any request
+        flags = await container.get(FeatureFlags)
+        return [tool for tool in ALL_TOOLS if flags.enabled(tool.name)]
+
+
+container = make_async_container(AppProvider(), FastMCPProvider())
+mcp = FastMCP(
+    'app',
+    lifespan=dishka_lifespan(container),
+    middleware=[DishkaMiddleware(), AuditMiddleware()],
+)
+setup_dishka(container, mcp)
+mcp.add_provider(FeatureTools())
+```
+
+Without the middleware nothing changes: `@inject` keeps its per-handler scope.
+With it:
+
+- Put `DishkaMiddleware` first. Middleware listed before it runs outside the
+  scope.
+- Every request gets a scope: tool calls, list requests, resource reads, prompt
+  renders, the handshake (`initialize` or `server/discover`) and `ping`. The
+  scope is lazy, so a request that resolves nothing creates no dependencies.
+  Notifications get no scope.
+- Async `@inject` handlers share the scope, so each REQUEST dependency has one
+  instance per request, also when providers of one request resolve it
+  concurrently. The
+  scope is finalized once, when the rest of the request is done and before the
+  response goes out, so a slow finalizer delays the response. An exception from
+  a handler closes it and propagates unchanged.
+- To keep one instance per request, the scope has a lock, like dishka's APP
+  scope: lookups in one request run one at a time. A factory may resolve
+  through the container it gets as a parameter, but only in its own task. Called
+  from a task of its own, for example under `asyncio.gather`, that lookup waits
+  for the lock its caller holds and never returns. Declare such dependencies as
+  factory parameters instead.
+- The middleware finalizes the scope after the handler has produced its result.
+  A finalizer that raises therefore fails the whole request with a protocol
+  error, which FastMCP may mask as `Internal server error`; the server log has
+  the cause. Without the middleware the same error is raised inside the handler
+  call and reaches the client as a tool error.
+- `get_request_container()` raises `DishkaFastMCPError` where the request has no
+  scope. FastMCP lists component providers outside any request, for example on
+  startup to collect background-task components, so a provider returns no
+  components there, as above. Completion and extension-method handlers run
+  without the scope too: FastMCP gives them a fresh request context. A task a
+  handler spawns loses the scope once the request is served.
+- A tool built as `FunctionTool(fn=call, parameters=...)` resolves its runtime
+  dependency with `await get_request_container().get(dependency_type)`. The
+  container belongs to the event loop: a sync `call`, which FastMCP runs in a
+  worker thread, resolves with
+  `anyio.from_thread.run(container.get, dependency_type)`.
+- The root container is found as for `@inject`, and it must be an
+  `AsyncContainer`. The scope lives on the event loop, where a sync `Container`
+  would block, so with one every request fails with a protocol error, and the
+  server logs the `DishkaFastMCPError`.
+- Sync handlers keep a scope of their own in their worker thread: sharing the
+  event-loop scope would finalize thread-affine resources away from the thread
+  that created them. Under an `AsyncContainer` they fail as without the
+  middleware, because a sync handler needs a sync `Container`; a mounted router
+  set up with its own sync `Container` keeps working.
+- The outermost `DishkaMiddleware` of a request opens the scope; a mounted
+  server's own `DishkaMiddleware` does not open a second one. Mounted routers
+  without a container of their own share the scope. A router set up with a
+  different container keeps per-handler scopes from it, and
+  `get_request_container()` raises there, so its code never mixes instances of
+  two containers.
+- The scope's `Context` and `FastMCP` describe the request as the middleware
+  sees it: `FastMCP` is the server whose `DishkaMiddleware` opened the scope,
+  also for the handlers of mounted routers.
+- A direct `await server.call_tool(...)` outside an MCP request gets no scope,
+  and `@inject` opens one per handler. `task=True` handlers get none either:
+  `get_request_container()` raises in the worker, and `@inject` keeps rejecting
+  them.
+
+Values built from the request need no extra hook. A REQUEST provider that takes
+`Context` from `FastMCPProvider` reads the request, list requests included:
+
+```python
+class UserProvider(Provider):
+    @provide(scope=Scope.REQUEST)
+    def user(self, ctx: Context) -> User:
+        meta = ctx.request_context.meta if ctx.request_context else None
+        return User((meta or {}).get('user', 'anonymous'))
+```
 
 ## Sync request finalization
 

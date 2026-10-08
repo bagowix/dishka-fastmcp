@@ -11,9 +11,17 @@ from typing import Any
 from dishka import AsyncContainer, Container, make_async_container, make_container
 from fastmcp import FastMCP
 from fastmcp.server.lifespan import Lifespan, lifespan
+from fastmcp.server.middleware import Middleware
 from fastmcp.utilities.lifespan import combine_lifespans
 
-from dishka_fastmcp import FromDishka, dishka_lifespan, inject, setup_dishka
+from dishka_fastmcp import (
+    DishkaMiddleware,
+    FromDishka,
+    dishka_lifespan,
+    get_request_container,
+    inject,
+    setup_dishka,
+)
 
 
 class Service:
@@ -66,3 +74,11 @@ async def database(_: FastMCP[Any]) -> AsyncIterator[dict[str, Any]]:
 # It is a FastMCP Lifespan, so it composes with @lifespan functions through |.
 native_lifespan: Lifespan = dishka_lifespan(async_container)
 piped_lifespan: Lifespan = database | dishka_lifespan(async_container)
+
+# DishkaMiddleware is a FastMCP middleware, and the request container it opens is async.
+request_middleware: Middleware = DishkaMiddleware()
+middleware_server: FastMCP[Any] = FastMCP('middleware', middleware=[DishkaMiddleware()])
+
+
+async def resolve_from_request_scope() -> Service:
+    return await get_request_container().get(Service)

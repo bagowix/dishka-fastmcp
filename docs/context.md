@@ -40,6 +40,12 @@ child server is mounted, the injected `FastMCP` value is the server that owns th
 executing component. Its dependencies come from the container selected as
 described in [Mounted servers](lifecycle.md#mounted-servers).
 
+Under `DishkaMiddleware` the REQUEST scope is opened once per MCP request, so its
+`Context` and `FastMCP` describe the request as the middleware sees it:
+`FastMCP` is the server whose `DishkaMiddleware` opened the scope, also for the
+handlers of mounted routers. See
+[Request scope for the whole MCP request](lifecycle.md#request-scope-for-the-whole-mcp-request).
+
 ## Using context in providers
 
 Dependencies can consume the same context without coupling the handler to the

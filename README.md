@@ -72,9 +72,9 @@ Registration time and execution time are separate concerns:
   the inner decorator.
 - **`setup_dishka` associates the root container with the FastMCP application.**
   `@inject` selects that container from the application handling the current
-  operation, then opens and finalizes `Scope.REQUEST` around the handler. For a
-  sync handler, dependency setup, use, and cleanup all happen in its worker
-  thread.
+  operation, then opens and finalizes `Scope.REQUEST` around the handler, or
+  shares the scope `DishkaMiddleware` opened for the whole request. For a sync
+  handler, dependency setup, use, and cleanup all happen in its worker thread.
 - **Mounted routers use the serving server's container.** `dishka_lifespan`
   puts the container into the lifespan state of the server you serve, and routers
   mounted into it at any depth read it from there during MCP requests. A router
@@ -91,7 +91,7 @@ Registration time and execution time are separate concerns:
 | Scope | Boundary | Lifetime |
 |-------|----------|----------|
 | `Scope.APP` | The whole server | Owned by the root container; **you** close it on shutdown (see below) |
-| `Scope.REQUEST` | One tool call / resource read / prompt render | Opened and finalized by `@inject` around the handler |
+| `Scope.REQUEST` | One tool call / resource read / prompt render | Opened and finalized by `@inject` around the handler, or by `DishkaMiddleware` around the whole MCP request |
 
 `Scope.SESSION` is **intentionally not supported.** FastMCP does not provide a
 deterministic teardown boundary for a Dishka session container. Without that
@@ -175,10 +175,10 @@ raises a clear error.
 ## Return values
 
 An ordinary `def` or `async def` handler must return its completed value.
-Returning an awaitable, generator, or async generator is rejected because that
-work would outlive its REQUEST scope. FastMCP tool handlers defined directly as
-sync or async generator functions are supported; their scope stays open for the
-whole iteration.
+Returning an awaitable, generator, or async generator is rejected: FastMCP would
+run that work after the handler returns, when its REQUEST scope may already be
+finalized. FastMCP tool handlers defined directly as sync or async generator
+functions are supported; their scope stays open for the whole iteration.
 
 ## Accessing FastMCP objects
 
@@ -201,6 +201,33 @@ async def request_id(ctx: FromDishka[Context]) -> str:
 
 `FastMCPProvider` also exposes the active `FastMCP` server.
 
+## Request scope for the whole request
+
+`@inject` scopes one handler call. To give dynamic component providers,
+`FunctionTool` callables and middleware the same REQUEST dependencies, add
+`DishkaMiddleware` first in the middleware list and resolve through
+`get_request_container()`:
+
+```python
+from dishka_fastmcp import DishkaMiddleware, get_request_container
+
+mcp = FastMCP(
+    'shop',
+    lifespan=dishka_lifespan(container),
+    middleware=[DishkaMiddleware()],
+)
+
+
+async def current_user() -> User:
+    return await get_request_container().get(User)
+```
+
+Every request then gets one scope, list requests included, shared by async
+`@inject` handlers and finalized once before the response goes out. It needs an
+`AsyncContainer`. Without the middleware nothing changes; see
+[Request scope for the whole MCP request](https://bagowix.github.io/dishka-fastmcp/lifecycle/#request-scope-for-the-whole-mcp-request)
+for the rules.
+
 ## How this compares
 
 ### vs `fastmcp.dependencies.Depends`
@@ -220,7 +247,9 @@ same core use case. This package uses a different lifecycle model:
 
 - **Scope ownership.** `@inject` opens and closes the request scope where the
   handler runs, including FastMCP's sync worker thread. Thread-affine `REQUEST`
-  dependencies are therefore created and finalized on the same thread.
+  dependencies are therefore created and finalized on the same thread. The
+  opt-in `DishkaMiddleware` opens one scope for the whole MCP request instead,
+  and sync handlers keep their own.
 - **Supported boundaries.** `APP` and `REQUEST` are supported. `SESSION` is not
   exposed because FastMCP does not provide a deterministic session teardown
   boundary. Background-task handlers are rejected because they outlive the
