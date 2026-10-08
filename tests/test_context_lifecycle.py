@@ -260,6 +260,34 @@ async def test_async_generator_handler_keeps_request_scope_open_during_iteration
 
 
 @pytest.mark.asyncio
+async def test_closing_an_async_generator_handler_early_finalizes_its_scope() -> None:
+    provider = AsyncResourceProvider()
+    container = make_async_container(provider)
+    mcp = FastMCP('test')
+    setup_dishka(container, mcp)
+
+    @inject
+    async def stream(resource: FromDishka[RequestResource]) -> AsyncIterator[str]:
+        yield resource
+        yield resource
+
+    @mcp.tool
+    async def handler() -> bool:
+        messages = stream()
+        await anext(messages)
+        await messages.aclose()
+        return provider.released.is_set()
+
+    try:
+        result = await mcp.call_tool('handler')
+        block = result.content[0]
+        assert isinstance(block, TextContent)
+        assert block.text == 'true'
+    finally:
+        await container.close()
+
+
+@pytest.mark.asyncio
 async def test_sync_handler_returning_generator_is_rejected() -> None:
     container = make_container(SyncResourceProvider())
     mcp = FastMCP('test', mask_error_details=False)
@@ -476,8 +504,12 @@ def test_inject_without_dependencies_returns_the_function_unchanged() -> None:
     async def plain_async(value: str) -> str:
         return value
 
+    async def plain_stream(value: str) -> AsyncIterator[str]:
+        yield value
+
     assert inject(plain) is plain
     assert inject(plain_async) is plain_async
+    assert inject(plain_stream) is plain_stream
 
 
 @pytest.mark.asyncio

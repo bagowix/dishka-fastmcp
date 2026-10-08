@@ -54,6 +54,16 @@ Python 3.11+, `dishka>=1.10.1`, `fastmcp>=4.0.0,<5`.
   generator, or async generator is rejected because it would outlive the
   REQUEST scope. Tool handlers defined directly as generator functions remain
   supported for the whole iteration.
+- **For a scope over the whole MCP request, add `DishkaMiddleware()` first** in
+  `FastMCP(middleware=[...])`. Dynamic component providers, `FunctionTool`
+  callables and middleware then resolve REQUEST dependencies with
+  `await get_request_container().get(T)`, and `@inject` handlers share the same
+  instances, finalized once before the response goes out. FastMCP also lists providers
+  outside requests (on startup), where `get_request_container()` raises; return
+  no components there. It raises in completion and extension-method handlers
+  as well. Sync handlers keep their own worker-thread
+  scope, and a router set up with a different container keeps its own scopes
+  and gets no request container.
 
 ## API
 
@@ -68,9 +78,17 @@ Python 3.11+, `dishka>=1.10.1`, `fastmcp>=4.0.0,<5`.
   closes it (async or sync) on shutdown; `finalize_container=False` leaves
   closing to the container's owner. Compose it with `combine_lifespans`, or with
   `|` when the other lifespan is a FastMCP `@lifespan` function.
+- `DishkaMiddleware()` — FastMCP middleware that opens one REQUEST scope per MCP
+  request (list requests included) and shares it with `@inject` handlers. Put
+  it first; it needs an `AsyncContainer`.
+- `get_request_container()` — the REQUEST `AsyncContainer` of the current MCP
+  request, shared with `@inject` handlers; raises `DishkaFastMCPError` outside
+  the middleware's scope.
 - `DishkaFastMCPError` — raised on integration misuse: a missing or wrong-kind
   container, a different container already registered for the app, a returned
-  awaitable or generator, or injection inside a `task=True` worker.
+  awaitable or generator, injection inside a `task=True` worker,
+  `get_request_container()` outside a request scope, or `DishkaMiddleware` with
+  a sync container.
 
 ## Usage
 
