@@ -4,7 +4,7 @@ import asyncio
 import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any, NewType
+from typing import Any, Literal, NewType
 
 import pytest
 from dishka import (
@@ -143,14 +143,16 @@ async def test_root_serves_mounted_tool_resource_template_and_prompt(
     assert provider.finalized == 1
 
 
+# 'auto' negotiates the sessionless 2026-07-28 era; 'legacy' keeps the handshake.
+@pytest.mark.parametrize('mode', ['auto', 'legacy'])
 @pytest.mark.asyncio
-async def test_root_serves_two_levels_of_mounting() -> None:
+async def test_root_serves_two_levels_of_mounting(mode: Literal['auto', 'legacy']) -> None:
     server = served_root(make_async_container(LabelProvider('root')))
     middle = FastMCP('middle')
     middle.mount(labelled_router('leaf'), namespace='leaf')
     server.mount(middle, namespace='middle')
 
-    async with Client(server) as client:
+    async with Client(server, mode=mode) as client:
         assert await call_text(client, 'middle_leaf_whoami') == 'root'
 
 
@@ -161,6 +163,21 @@ async def test_router_mounted_while_serving_is_covered() -> None:
     async with Client(server) as client:
         server.mount(labelled_router(), namespace='late')
         assert await call_text(client, 'late_whoami') == 'root'
+
+
+@pytest.mark.asyncio
+async def test_router_with_its_own_setup_mounted_while_serving_keeps_its_container() -> None:
+    router_container = make_async_container(LabelProvider('router'))
+    server = served_root(make_async_container(LabelProvider('root')))
+    router = labelled_router()
+    setup_dishka(router_container, router)
+
+    try:
+        async with Client(server) as client:
+            server.mount(router, namespace='late')
+            assert await call_text(client, 'late_whoami') == 'router'
+    finally:
+        await router_container.close()
 
 
 @pytest.mark.asyncio
