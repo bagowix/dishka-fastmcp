@@ -58,7 +58,8 @@ time and never appears in the schema.
 uv add dishka-fastmcp        # or: pip install dishka-fastmcp
 ```
 
-Requires Python 3.11+, `dishka>=1.10.1`, `fastmcp>=3.2.4,<4`.
+Requires Python 3.11+, `dishka>=1.10.1`, `fastmcp>=4.0.0,<5`. Servers still on
+FastMCP 3.x should stay on dishka-fastmcp 2.0.x.
 
 ## How it works
 
@@ -74,6 +75,16 @@ Registration time and execution time are separate concerns:
   operation, then opens and finalizes `Scope.REQUEST` around the handler. For a
   sync handler, dependency setup, use, and cleanup all happen in its worker
   thread.
+- **Mounted routers use the serving server's container.** `dishka_lifespan`
+  puts the container into the lifespan state of the server you serve, and routers
+  mounted into it at any depth read it from there during MCP requests. A router
+  mounted into several servers uses the container of the one serving the
+  request. A router with its own `setup_dishka` keeps its own container, and so
+  does one with its own `dishka_lifespan` if it is mounted before the server
+  starts. Routers below such a router still take the serving root's. Direct
+  `server.call_tool()` calls outside an MCP request and servers behind
+  `create_proxy` are not covered; see
+  [Mounted servers](https://bagowix.github.io/dishka-fastmcp/lifecycle/#mounted-servers).
 
 ## Scopes
 
@@ -92,10 +103,18 @@ boundary, session-scoped resources could not be finalized reliably.
 container. `dishka_lifespan(container)` — used in the example above — closes it
 (async or sync) and removes its application registration when the server stops,
 finalizing every `Scope.APP` provider. If you already have a lifespan, compose
-it with `dishka_lifespan` using FastMCP's `combine_lifespans`. For multiple
+it with `dishka_lifespan` using FastMCP's `combine_lifespans`, or through `|`
+when it is a FastMCP `@lifespan` function. For multiple
 FastMCP servers hosted by one ASGI application, combine each
 `mcp.http_app().lifespan`; see
 [Lifecycle and scopes](https://bagowix.github.io/dishka-fastmcp/lifecycle/).
+
+If the same container also serves FastAPI, FastStream, a worker or a test
+session, the MCP server must not close it while they still use it. List
+`mcp.http_app().lifespan` first in `combine_lifespans`, or pass
+`dishka_lifespan(container, finalize_container=False)` and close the container
+where it is owned; see
+[Sharing the container](https://bagowix.github.io/dishka-fastmcp/lifecycle/#sharing-the-container).
 
 FastMCP may execute regular sync handlers on different worker threads. Consequently,
 `Scope.APP` dependencies in a sync container must be thread-safe and their
@@ -105,12 +124,12 @@ creation, use and finalization in one worker thread.
 
 ### Background tasks
 
-FastMCP's `task=True` handlers are **not supported**. The tool call returns as
-soon as the work is queued, so the request — and with it the REQUEST scope — is
-already over by the time the worker runs the handler. Injection there fails with
-`DishkaFastMCPError`. Keep `FromDishka` handlers request-bound; if you need
-background work, resolve dependencies inside the request and pass plain values
-to the task.
+FastMCP's `task=True` handlers are **not supported**. In FastMCP 4 they come from
+the optional `fastmcp-tasks` extension and run in a task worker, detached from the
+request that queued them and possibly in another process. `@inject` detects the
+worker and raises `DishkaFastMCPError` there. Keep `FromDishka` handlers
+request-bound; if you need background work, resolve dependencies inside the
+request and pass plain values to the task.
 
 ## Resources and prompts
 
@@ -140,13 +159,14 @@ same thread:
 from dishka import make_container
 
 container = make_container(AppProvider())
+mcp = FastMCP('sync', lifespan=dishka_lifespan(container))
 setup_dishka(container, mcp)
 
 
 @mcp.tool
 @inject
-def compute(x: int, service: FromDishka[Calculator]) -> int:
-    return service.square(x)
+def get_price_sync(item: str, catalog: FromDishka[Catalog]) -> int:
+    return catalog.price(item)
 ```
 
 Async handlers need an async container (`make_async_container`); mixing the two
@@ -175,8 +195,8 @@ container = make_async_container(AppProvider(), FastMCPProvider())
 
 @mcp.tool
 @inject
-async def notify(message: str, ctx: FromDishka[Context]) -> None:
-    await ctx.info(message)
+async def request_id(ctx: FromDishka[Context]) -> str:
+    return ctx.request_id
 ```
 
 `FastMCPProvider` also exposes the active `FastMCP` server.
@@ -207,6 +227,8 @@ same core use case. This package uses a different lifecycle model:
   originating request.
 - **Container lookup.** The active container is associated with its owning
   FastMCP application and resolved through FastMCP's public operation context.
+  Routers mounted into a served server take its container from the lifespan
+  state FastMCP hands to each request.
 
 ## License
 

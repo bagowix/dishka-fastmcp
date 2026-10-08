@@ -6,7 +6,7 @@ default_stages: [pre-commit, pre-push]
 
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.1
+    rev: v0.16.10
     hooks:
       - id: ruff-format
       - id: ruff-check
@@ -48,7 +48,7 @@ repos:
         pass_filenames: false
 
   - repo: https://github.com/jackdewinter/pymarkdown
-    rev: v0.9.38
+    rev: v0.9.40
     hooks:
       - id: pymarkdown
         name: pymarkdown

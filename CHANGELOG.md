@@ -6,6 +6,71 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Routers mounted into a server now use that server's container. Before, every
+  mounted router needed its own `setup_dishka` call: with setup only on the root,
+  a mounted component failed with "No dishka container for the active FastMCP
+  application", because FastMCP makes the mounted server the active application
+  while its component runs. Give the root `dishka_lifespan(container)` and
+  `setup_dishka(container, root)`, and routers mounted at any depth, later
+  mounts and mounts with `namespace` or `tool_names` resolve from the root's
+  container. A router mounted into several servers uses the container of the
+  server serving the request.
+- The container reaches mounted routers through MCP requests. A direct
+  `server.call_tool()` outside a request still reaches only the server's own
+  components, so test mounted routers through `Client(server)`. A server behind
+  `create_proxy` needs its own `setup_dishka`.
+- `dishka_lifespan(container, finalize_container=False)` leaves closing the
+  container to its owner. The name follows `finalize_container` in dishka's own
+  integrations, and it defaults to `True`, so the lifespan keeps closing the
+  container unless told otherwise. Use it when the container is shared with
+  FastAPI, FastStream, a worker or a test session. Routers without a container
+  of their own get the root's container only through `dishka_lifespan`, which
+  otherwise closes it when the MCP server stops. With `finalize_container=False`
+  the lifespan still registers the container and hands it to mounted routers,
+  and a registration that `setup_dishka` made before startup survives the
+  shutdown.
+- The lifecycle guide now covers the lifespan order for a shared container.
+  FastMCP's FastAPI guide combines `app_lifespan` before `mcp_app.lifespan`, so
+  the container closes first and `app_lifespan` shuts down against a closed
+  container. Dishka raises no error there: it creates the `Scope.APP`
+  dependencies again, and they leak unless the container is closed once more.
+  List `mcp_app.lifespan` first, or pass `finalize_container=False` and close the
+  container where it is owned.
+
+### Changed
+
+- dishka-fastmcp now requires FastMCP 4 (`fastmcp>=4.0.0,<5`); FastMCP 3.x is no
+  longer supported. If your server still runs on FastMCP 3, stay on
+  dishka-fastmcp 2.0.x and migrate the server first with FastMCP's
+  [upgrade guide](https://gofastmcp.com/getting-started/upgrading/from-fastmcp-3).
+  The functions and classes this package exports keep their names and
+  arguments; the return type of `dishka_lifespan` changed (see below). Injection
+  works on both protocol eras FastMCP 4 speaks: the sessionless 2026-07-28 era
+  its `Client` negotiates by default, and the legacy handshake.
+- `dishka_lifespan` now returns a FastMCP `Lifespan`
+  (`fastmcp.server.lifespan.Lifespan`) whose lifespan state is
+  `{'dishka_fastmcp.container': container}`. It composes with `@lifespan`
+  functions through `|`, and through `combine_lifespans` with lifespans that
+  yield a mapping or `None`. To use `|` with an `@asynccontextmanager` lifespan,
+  wrap that lifespan in FastMCP's `ContextManagerLifespan`. A `Lifespan` is
+  still called with the server and returns an async context manager, so an
+  annotation such as
+  `Callable[[FastMCP], AbstractAsyncContextManager[dict[str, Any]]]` accepts it.
+  Code that annotated it with `AbstractAsyncContextManager[None]` should
+  annotate it as `Lifespan` or as that `Callable` instead.
+- `dishka_lifespan` now also registers its container for the application on
+  startup, as `setup_dishka` does. A server whose lifespan includes it resolves
+  its own components during MCP requests even without `setup_dishka`; keep
+  calling `setup_dishka` for direct `call_tool()` calls outside the lifespan.
+- `task=True` handlers are still rejected with `DishkaFastMCPError`. FastMCP 4
+  moved background tasks into the optional `fastmcp-tasks` extension, and
+  dishka-fastmcp recognizes its workers without importing it, so `fastmcp[tasks]`
+  stays an opt-in for your server. The error message no longer claims the request
+  scope has already ended: `@inject` owns its REQUEST scope, and the actual reason
+  is that the handler runs in a worker outside the request that queued it.
+
 ## [2.0.1] - 2026-08-08
 
 ### Fixed
@@ -101,6 +166,7 @@ prompts.
 - Handlers registered with FastMCP's `task=True` are not supported: they run after
   the request has finished, so no container is in scope for them.
 
-[Unreleased]: https://github.com/bagowix/dishka-fastmcp/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/bagowix/dishka-fastmcp/compare/v2.0.1...HEAD
+[2.0.1]: https://github.com/bagowix/dishka-fastmcp/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/bagowix/dishka-fastmcp/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/bagowix/dishka-fastmcp/releases/tag/v1.0.0

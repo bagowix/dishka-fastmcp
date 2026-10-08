@@ -9,7 +9,8 @@ setup_dishka(container: AsyncContainer | Container, app: FastMCP) -> None
 ```
 
 Associates a root container with the FastMCP application. Call it once before
-the server starts.
+the server starts. Routers mounted into the application get the container
+through `dishka_lifespan`; see [Mounted servers](lifecycle.md#mounted-servers).
 
 ## `inject`
 
@@ -36,15 +37,28 @@ finalized.
 ## `dishka_lifespan`
 
 ```python
-dishka_lifespan(container) -> Callable[..., AbstractAsyncContextManager[None]]
+dishka_lifespan(
+    container,
+    *,
+    finalize_container: bool = True,
+) -> fastmcp.server.lifespan.Lifespan
 ```
 
-Returns a FastMCP lifespan that closes an async or sync root container during
-server shutdown and removes its `setup_dishka` registration. Compose this
-lifespan with other FastMCP lifespans using
+Returns a FastMCP lifespan that registers the container for the application on
+startup, as `setup_dishka` does. By default it also closes the async or sync
+container and removes the registration on shutdown. Its lifespan state is
+`{'dishka_fastmcp.container': container}`, which is how servers mounted into the
+application find the container during the MCP requests it serves. Compose this
+lifespan with `@lifespan` functions through `|`, or with other lifespans using
 `fastmcp.utilities.lifespan.combine_lifespans`. On startup it raises
-`DishkaFastMCPError` if `setup_dishka` registered a different container for the
-app.
+`DishkaFastMCPError` if a different container is already registered for the
+app, by `setup_dishka` or by another `dishka_lifespan`.
+
+With `finalize_container=False` the lifespan registers the container and
+publishes it in the same way, but leaves closing it to the container's owner,
+and a registration that `setup_dishka` made before startup survives the
+shutdown. See
+[Sharing the container](lifecycle.md#sharing-the-container).
 
 ## `FastMCPProvider`
 
@@ -59,5 +73,8 @@ import their entire integration surface from one package.
 
 ## `DishkaFastMCPError`
 
-Raised for integration misuse, including a missing container registration or a
-container type that does not match the handler's sync or async execution model.
+Raised for integration misuse: a missing container registration, a container
+type that does not match the handler's sync or async execution model, a
+different container registered for the same application, a deferred result
+returned by an ordinary handler, or injection inside a `task=True` background
+worker.

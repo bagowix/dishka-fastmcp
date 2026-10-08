@@ -82,8 +82,7 @@ async def test_sync_tool_run_in_thread_propagates_container() -> None:
     main_thread = threading.get_ident()
     seen: dict[str, int] = {}
 
-    # Sync tools run in a worker thread by default; we do not pass the
-    # run_in_thread kwarg (added after fastmcp 3.2.4) so the floor stays low.
+    # Sync tools run in a worker thread by default (run_in_thread=True).
     @mcp.tool
     @inject
     def work(app: FromDishka[AppDep], req: FromDishka[ReqDep]) -> str:

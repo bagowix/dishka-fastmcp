@@ -69,7 +69,7 @@ jobs:
         run: >-
           uv pip install
           'dishka==1.10.1'
-          'fastmcp==3.2.4'
+          'fastmcp[tasks]==4.0.0'
 
       - name: Tests against minimum versions
         run: uv run --no-sync pytest
