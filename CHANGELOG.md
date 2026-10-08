@@ -6,15 +6,41 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Routers mounted into a server now use that server's container. Before, every
+  mounted router needed its own `setup_dishka` call: with setup only on the root,
+  a mounted component failed with "No dishka container for the active FastMCP
+  application", because FastMCP makes the mounted server the active application
+  while its component runs. Give the root `dishka_lifespan(container)` and
+  `setup_dishka(container, root)`, and routers mounted at any depth, later
+  mounts and mounts with `namespace` or `tool_names` resolve from the root's
+  container. A router mounted into several servers uses the container of the
+  server serving the request.
+- The container reaches mounted routers through MCP requests. A direct
+  `server.call_tool()` outside a request still reaches only the server's own
+  components, so test mounted routers through `Client(server)`. A server behind
+  `create_proxy` needs its own `setup_dishka`.
+
 ### Changed
 
 - dishka-fastmcp now requires FastMCP 4 (`fastmcp>=4.0.0,<5`); FastMCP 3.x is no
   longer supported. If your server still runs on FastMCP 3, stay on
   dishka-fastmcp 2.0.x and migrate the server first with FastMCP's
   [upgrade guide](https://gofastmcp.com/getting-started/upgrading/from-fastmcp-3).
-  The public API of this package is unchanged. Injection works on both protocol
-  eras FastMCP 4 speaks: the sessionless 2026-07-28 era its `Client` negotiates
+  The functions and classes this package exports keep their names and
+  arguments; the return type of `dishka_lifespan` changed (see below). Injection
+  works on both protocol eras FastMCP 4 speaks: the sessionless 2026-07-28 era its `Client` negotiates
   by default, and the legacy handshake.
+- `dishka_lifespan` now yields `{'dishka_fastmcp.container': container}` as the
+  server's lifespan state, so its type is
+  `Callable[[FastMCP], AbstractAsyncContextManager[dict[str, Any]]]`. Code that
+  annotated it with `AbstractAsyncContextManager[None]` needs the new type; it
+  still composes with other dict-yielding lifespans through `combine_lifespans`.
+- `dishka_lifespan` now also registers its container for the application on
+  startup, as `setup_dishka` does. A server whose lifespan includes it resolves
+  its own components during MCP requests even without `setup_dishka`; keep
+  calling `setup_dishka` for direct `call_tool()` calls outside the lifespan.
 - `task=True` handlers are still rejected with `DishkaFastMCPError`. FastMCP 4
   moved background tasks into the optional `fastmcp-tasks` extension, and
   dishka-fastmcp recognizes its workers without importing it, so `fastmcp[tasks]`

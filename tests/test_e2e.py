@@ -6,6 +6,7 @@ from typing import Literal, NewType
 import pytest
 from dishka import Provider, Scope, make_async_container, provide
 from fastmcp import Client, Context, FastMCP
+from fastmcp.utilities.tests import asgi_server
 from mcp.types import TextContent
 
 from dishka_fastmcp import (
@@ -92,6 +93,60 @@ async def test_client_protocol_runs_injection_and_finalizes_all_scopes(
         assert isinstance(tool_block, TextContent)
         assert isinstance(prompt_block, TextContent)
         assert tool_block.text == 'app:request:end-to-end:value'
+        assert resource_result[0].text == 'app:request'
+        assert prompt_block.text == 'app:request'
+        assert provider.request_finalized == 3
+        assert not provider.app_closed
+
+    assert provider.app_closed
+
+
+@pytest.mark.asyncio
+async def test_http_root_setup_serves_a_mounted_router() -> None:
+    provider = EndToEndProvider()
+    container = make_async_container(provider, FastMCPProvider())
+    server = FastMCP('root', lifespan=dishka_lifespan(container))
+    router = FastMCP('router')
+    setup_dishka(container, server)
+
+    @router.tool
+    @inject
+    async def tool(
+        value: str,
+        app: FromDishka[AppValue],
+        request: FromDishka[RequestValue],
+        context: FromDishka[Context],
+    ) -> str:
+        return f'{app}:{request}:{context.fastmcp.name}:{value}'
+
+    @router.resource('data://router')
+    @inject
+    async def resource(app: FromDishka[AppValue], request: FromDishka[RequestValue]) -> str:
+        return f'{app}:{request}'
+
+    @router.prompt
+    @inject
+    async def prompt(app: FromDishka[AppValue], request: FromDishka[RequestValue]) -> str:
+        return f'{app}:{request}'
+
+    server.mount(router, namespace='router')
+
+    async with (
+        asgi_server(server, stateless_http=True, json_response=True) as http,
+        http.client() as client,
+    ):
+        tools = await client.list_tools()
+        assert tools[0].input_schema['properties'].keys() == {'value'}
+
+        tool_result = await client.call_tool('router_tool', {'value': 'value'})
+        resource_result = await client.read_resource('data://router/router')
+        prompt_result = await client.get_prompt('router_prompt')
+
+        tool_block = tool_result.content[0]
+        prompt_block = prompt_result.messages[0].content
+        assert isinstance(tool_block, TextContent)
+        assert isinstance(prompt_block, TextContent)
+        assert tool_block.text == 'app:request:router:value'
         assert resource_result[0].text == 'app:request'
         assert prompt_block.text == 'app:request'
         assert provider.request_finalized == 3

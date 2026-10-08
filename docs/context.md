@@ -37,7 +37,8 @@ All entries are request-scoped and resolved only when requested:
 
 Use `Context` for request IDs, progress reporting, and resource access. When a
 child server is mounted, the injected `FastMCP` value is the server that owns the
-executing component.
+executing component. Its dependencies come from the container selected as
+described in [Mounted servers](lifecycle.md#mounted-servers).
 
 ## Using context in providers
 

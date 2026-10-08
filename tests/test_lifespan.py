@@ -12,7 +12,7 @@ from fastmcp.utilities.lifespan import combine_lifespans
 from starlette.applications import Starlette
 
 from dishka_fastmcp import DishkaFastMCPError, dishka_lifespan, setup_dishka
-from dishka_fastmcp._container import get_registered_container
+from dishka_fastmcp._container import LIFESPAN_STATE_KEY, get_registered_container
 
 AppResource = NewType('AppResource', str)
 
@@ -152,7 +152,7 @@ async def test_lifespan_works_with_fastmcp_combine_lifespans() -> None:
         dishka_lifespan(container),
     )
     async with combined(mcp) as state:
-        assert state == {'application': True}
+        assert state == {'application': True, LIFESPAN_STATE_KEY: container}
         assert get_registered_container(mcp) is container
         assert not provider.closed
 

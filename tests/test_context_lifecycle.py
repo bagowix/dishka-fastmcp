@@ -695,7 +695,7 @@ async def test_background_task_handler_is_rejected_in_the_worker() -> None:
 async def test_injection_works_when_fastmcp_tasks_is_not_loaded(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delitem(sys.modules, 'fastmcp_tasks.context', raising=False)
+    monkeypatch.setitem(sys.modules, 'fastmcp_tasks.context', None)
     container = make_async_container(AsyncResourceProvider())
     mcp = FastMCP('test')
     setup_dishka(container, mcp)

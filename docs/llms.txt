@@ -16,6 +16,14 @@ Python 3.11+, `dishka>=1.10.1`, `fastmcp>=4.0.0,<5`.
   injected services never appear as tool arguments. Wrong order leaks the service
   into the schema.
 - **Call `setup_dishka(container, mcp)` once** before running the server.
+- **Routers need no setup of their own.** Routers mounted into a server whose
+  lifespan includes `dishka_lifespan(container)` use that container during the
+  MCP requests the server serves (any depth, with or without `namespace`). A
+  router mounted into several servers uses the serving server's container. A
+  router with its own `setup_dishka` or `dishka_lifespan` keeps its container;
+  routers below it still take the serving server's. A direct `server.call_tool()`
+  outside an MCP request does not reach mounted routers; test them through
+  `Client(server)`.
 - **Async handlers need `make_async_container`; sync handlers need
   `make_container`** (regular sync handlers run in a FastMCP worker thread).
   Mixing the two raises `DishkaFastMCPError`.

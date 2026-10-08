@@ -41,11 +41,11 @@ setup_dishka(async_container, server)
 setup_dishka(sync_container, server)
 
 # dishka_lifespan produces something FastMCP accepts as a lifespan.
-async_lifespan: Callable[[FastMCP[Any]], AbstractAsyncContextManager[None]] = dishka_lifespan(
-    async_container,
+async_lifespan: Callable[[FastMCP[Any]], AbstractAsyncContextManager[dict[str, Any]]] = (
+    dishka_lifespan(async_container)
 )
-sync_lifespan: Callable[[FastMCP[Any]], AbstractAsyncContextManager[None]] = dishka_lifespan(
-    sync_container,
+sync_lifespan: Callable[[FastMCP[Any]], AbstractAsyncContextManager[dict[str, Any]]] = (
+    dishka_lifespan(sync_container)
 )
 lifespan_server: FastMCP[Any] = FastMCP('typed', lifespan=dishka_lifespan(async_container))
 combined_lifespan: Callable[

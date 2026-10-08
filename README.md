@@ -75,6 +75,15 @@ Registration time and execution time are separate concerns:
   operation, then opens and finalizes `Scope.REQUEST` around the handler. For a
   sync handler, dependency setup, use, and cleanup all happen in its worker
   thread.
+- **Mounted routers use the serving server's container.** `dishka_lifespan`
+  puts the container into the lifespan state of the server you serve, and routers
+  mounted into it at any depth read it from there during MCP requests. A router
+  mounted into several servers uses the container of the one serving the
+  request. A router with its own `setup_dishka` or `dishka_lifespan` keeps its
+  own container, but routers below it take the serving root's. Direct
+  `server.call_tool()` calls outside an MCP request and servers behind
+  `create_proxy` are not covered; see
+  [Mounted servers](https://bagowix.github.io/dishka-fastmcp/lifecycle/#mounted-servers).
 
 ## Scopes
 

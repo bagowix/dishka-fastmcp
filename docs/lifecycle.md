@@ -85,6 +85,53 @@ Do not combine `dishka_lifespan(first_container)` and
 `combine_lifespans` passes the same ASGI application to every lifespan. Each
 `mcp.http_app().lifespan` adapter preserves the corresponding FastMCP instance.
 
+## Mounted servers
+
+A server built from routers needs one container, on the server you serve. Give
+that server `dishka_lifespan(container)` and `setup_dishka(container, server)`;
+routers mounted into it at any depth use its container. This includes routers
+mounted later and mounts with `namespace` or `tool_names`:
+
+```python
+container = make_async_container(AppProvider())
+server = FastMCP('app', lifespan=dishka_lifespan(container))
+setup_dishka(container, server)
+
+users = FastMCP('users')
+
+
+@users.tool
+@inject
+async def get_user(user_id: int, repo: FromDishka[UserRepository]) -> User:
+    return await repo.get(user_id)
+
+
+server.mount(users, namespace='users')
+```
+
+`dishka_lifespan` puts the container into the server's lifespan state. FastMCP
+hands that state to every MCP request the server serves, mounted components
+included, so a component whose own server has no container takes it from there.
+The rules that follow from it:
+
+- A mounted server with its own `setup_dishka` or `dishka_lifespan` keeps its own
+  container. Servers mounted under it without a container of their own use the
+  serving root's, never the nearest set-up server's.
+- A router mounted into several servers uses the container of the server that
+  serves the request, so one router module can back several applications.
+- A server without `dishka_lifespan` hands no container to its routers, even when
+  the same router is mounted into another server that has one. The same holds when
+  the serving server's lifespan state is not a mapping, so combine `dishka_lifespan`
+  with dict-yielding lifespans only.
+- The container travels with MCP requests (a `Client`, HTTP, stdio). A direct
+  `await server.call_tool(...)` outside a request reaches only the server's own
+  components; test mounted routers through `Client(server)`.
+- A server behind `create_proxy(...)` runs its own MCP session and needs its own
+  `setup_dishka`.
+
+`Context` and `FastMCP` from `FastMCPProvider` still describe the mounted server
+that owns the executing component.
+
 ## Sync request finalization
 
 FastMCP offloads regular sync handlers to worker threads. `@inject` opens and
