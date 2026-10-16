@@ -97,7 +97,8 @@ Registration and execution are separate concerns.
   Sync-tool tests must prove `ContextVar` propagation through `run_in_thread`.
 - **CHANGELOG** in Keep a Changelog format, written by hand in prose.
 - **Agent-facing docs follow the API.** A change to the public surface or its
-  rules also updates `docs/llms.txt` and `skills/dishka-fastmcp/SKILL.md`.
+  rules also updates `docs/llms.txt`, `skills/dishka-fastmcp/SKILL.md` and the
+  `rules` in `context7.json`.
 - Type checkers cover the package and a dedicated typing-surface test, not the
   whole suite — strict-checking decorator-registered handlers only fights
   `reportUnusedFunction`.
