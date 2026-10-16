@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-10-16
+
 ### Added
 
 - Python 3.15 is supported: CI runs the full check list on it. If your tests
@@ -224,7 +226,8 @@ prompts.
 - Handlers registered with FastMCP's `task=True` are not supported: they run after
   the request has finished, so no container is in scope for them.
 
-[Unreleased]: https://github.com/bagowix/dishka-fastmcp/compare/v3.1.0...HEAD
+[Unreleased]: https://github.com/bagowix/dishka-fastmcp/compare/v3.2.0...HEAD
+[3.2.0]: https://github.com/bagowix/dishka-fastmcp/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/bagowix/dishka-fastmcp/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/bagowix/dishka-fastmcp/compare/v2.0.1...v3.0.0
 [2.0.1]: https://github.com/bagowix/dishka-fastmcp/compare/v2.0.0...v2.0.1
