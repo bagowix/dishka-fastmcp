@@ -186,4 +186,5 @@ dev = [
     "pytest-cov>=7.1.0",
     "ruff>=0.16.10",
     "zensical>=0.0.68",
+    "zizmor>=1.31.1",
 ]
