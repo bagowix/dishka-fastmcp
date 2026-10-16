@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Python 3.15 is supported: CI runs the full check list on it. If your tests
+  turn warnings into errors, importing FastMCP on 3.15 fails on a
+  `DeprecationWarning` from its `py-key-value-aio` dependency (`isinstance()` on
+  a protocol without `@runtime_checkable`); filter that warning until upstream
+  fixes it.
+
 ## [3.1.0] - 2026-10-09
 
 ### Added

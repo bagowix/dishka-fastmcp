@@ -41,7 +41,7 @@ Dishka `Scope.REQUEST` container and finalized when the tool call ends.
 
 | | Support |
 |---|---|
-| Python | 3.11-3.14 |
+| Python | 3.11-3.15 |
 | Dishka | 1.10.1 and newer |
 | FastMCP | 4.0.0 through 4.x |
 | Handlers | Tools, resources, and prompts |

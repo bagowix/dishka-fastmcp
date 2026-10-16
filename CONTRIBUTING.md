@@ -17,7 +17,7 @@ uv run prek install  # one-time: installs the git hooks
 
 ## Running the checks
 
-CI runs exactly these on Python 3.11–3.14. Run them locally before opening a PR:
+CI runs exactly these on Python 3.11–3.15. Run them locally before opening a PR:
 
 ```bash
 uv run ruff format --check    # formatting
