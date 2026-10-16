@@ -126,6 +126,9 @@ async def get_price(item: str, catalog: FromDishka[Catalog]) -> int:
 
 - [Documentation](https://bagowix.github.io/dishka-fastmcp/)
 - [Context7](https://context7.com/bagowix/dishka-fastmcp)
+- [Agent Skill](https://github.com/bagowix/dishka-fastmcp/blob/main/skills/dishka-fastmcp/SKILL.md):
+  a workflow for wiring dishka into a FastMCP server with a coding agent;
+  install with `npx skills add bagowix/dishka-fastmcp`
 - [README](https://github.com/bagowix/dishka-fastmcp/blob/main/README.md)
 - [Source](https://github.com/bagowix/dishka-fastmcp)
 - [PyPI](https://pypi.org/project/dishka-fastmcp/)

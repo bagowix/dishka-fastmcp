@@ -1,4 +1,16 @@
 {
+  "$schema": "https://context7.com/schema/context7.json",
   "url": "https://context7.com/bagowix/dishka-fastmcp",
-  "public_key": "pk_bvHXIFGM90BbYrcB3OvEn"
+  "public_key": "pk_bvHXIFGM90BbYrcB3OvEn",
+  "excludeFolders": ["tests"],
+  "rules": [
+    "Install dishka-fastmcp and import dishka_fastmcp; it is a different package from fastmcp-dishka (import fastmcp_dishka).",
+    "Put @inject below @mcp.tool, @mcp.resource or @mcp.prompt, so FromDishka parameters stay out of the tool schema.",
+    "Async handlers need make_async_container; sync handlers need make_container. One server's injected handlers share one kind.",
+    "Pass dishka_lifespan(container) to FastMCP(lifespan=...) and call setup_dishka(container, mcp) once per server that owns a container.",
+    "Use Scope.APP and Scope.REQUEST only; Scope.SESSION is not supported.",
+    "When the container is shared with FastAPI or FastStream, list the MCP lifespan first in combine_lifespans or pass finalize_container=False.",
+    "Return completed values from handlers; task=True handlers cannot use FromDishka.",
+    "For REQUEST dependencies outside handlers, add DishkaMiddleware() first and resolve with await get_request_container().get(T)."
+  ]
 }

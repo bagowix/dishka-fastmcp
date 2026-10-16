@@ -1,5 +1,10 @@
 {% extends "base.html" %}
 
+{# llms.txt v2: rel="describedby" points every page at the llms.txt that covers it. #}
+{% block extrahead %}
+  <link rel="describedby" type="text/plain" href="{{ config.site_url }}llms.txt">
+{% endblock %}
+
 {% block scripts %}
   {{ super() }}
   <script

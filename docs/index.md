@@ -37,6 +37,23 @@ async def get_price(item: str, catalog: FromDishka[Catalog]) -> int:
 The MCP client sees only the `item` argument. `catalog` is resolved inside a
 Dishka `Scope.REQUEST` container and finalized when the tool call ends.
 
+## With a coding agent
+
+The repository ships an [Agent Skill](https://agentskills.io/) that walks a
+coding agent through adding dishka-fastmcp to a FastMCP server: the container
+and lifespan, decorator order, sync and async handlers, mounted routers, the
+request-wide scope, and tests that assert the tool schema. It installs into
+Claude Code, Cursor, Codex, GitHub Copilot, Gemini CLI and the other agents
+that read the open skills format:
+
+```bash
+npx skills add bagowix/dishka-fastmcp
+```
+
+Agents that read documentation directly can use
+[llms.txt](https://bagowix.github.io/dishka-fastmcp/llms.txt) or
+[Context7](https://context7.com/bagowix/dishka-fastmcp).
+
 ## Supported surface
 
 | | Support |

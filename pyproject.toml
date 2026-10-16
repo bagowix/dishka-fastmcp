@@ -7,6 +7,7 @@ name = "dishka-fastmcp"
 dynamic = ["version"]
 description = "dishka IoC container integration for FastMCP: scopes, finalization and providers for MCP tools, resources and prompts."
 readme = "README.md"
+import-names = ["dishka_fastmcp"]
 requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -146,6 +147,7 @@ plugins.MD029.style = "ordered" # consistent ordered list numbering
 plugins.MD033.enabled = false   # allow inline HTML
 plugins.MD046.enabled = false   # fenced blocks inside lists trip the style check
 plugins.MD041.enabled = false   # do not require an H1 at the top of every file
+extensions.front-matter.enabled = true  # SKILL.md carries YAML front matter (Agent Skills spec)
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

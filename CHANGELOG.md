@@ -13,6 +13,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `DeprecationWarning` from its `py-key-value-aio` dependency (`isinstance()` on
   a protocol without `@runtime_checkable`); filter that warning until upstream
   fixes it.
+- An Agent Skill for coding agents. A model trained before this library existed
+  guesses its API, or reaches for `fastmcp-dishka`, a different package with
+  similar names. `skills/dishka-fastmcp/SKILL.md` follows the open
+  [Agent Skills](https://agentskills.io/) format and installs with
+  `npx skills add bagowix/dishka-fastmcp` into Claude Code, Cursor, Codex,
+  GitHub Copilot, Gemini CLI and the other clients that read it. It walks the
+  agent through the container and lifespan, decorator order, sync and async
+  handlers, mounted routers, `DishkaMiddleware`, and tests that assert the tool
+  schema, and links the docs for the rest. `context7.json` now carries the same
+  rules for Context7, and every docs page links its `llms.txt`.
+- The wheel declares its import name (`Import-Name: dishka_fastmcp`, PEP 794),
+  so tools can map `import dishka_fastmcp` to the package to install.
 
 ## [3.1.0] - 2026-10-09
 

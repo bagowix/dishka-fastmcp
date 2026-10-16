@@ -9,6 +9,7 @@
 [![llms.txt](https://img.shields.io/badge/-llms.txt-brightgreen)](docs/llms.txt)
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-2f6f55.svg)](https://bagowix.github.io/dishka-fastmcp/)
 [![Context7](https://img.shields.io/badge/docs-Context7-1f6feb.svg)](https://context7.com/bagowix/dishka-fastmcp)
+[![skills.sh](https://skills.sh/b/bagowix/dishka-fastmcp)](https://skills.sh/bagowix/dishka-fastmcp)
 
 [dishka](https://github.com/reagento/dishka) IoC container integration for
 [FastMCP](https://github.com/prefecthq/fastmcp). Declare dependencies as
@@ -60,6 +61,23 @@ uv add dishka-fastmcp        # or: pip install dishka-fastmcp
 
 Requires Python 3.11+, `dishka>=1.10.1`, `fastmcp>=4.0.0,<5`. Servers still on
 FastMCP 3.x should stay on dishka-fastmcp 2.0.x.
+
+## With a coding agent
+
+The repository ships an [Agent Skill](https://agentskills.io/) that walks a
+coding agent through adding dishka-fastmcp to a FastMCP server: the container
+and lifespan, decorator order, sync and async handlers, mounted routers, the
+request-wide scope, and tests that assert the tool schema. It installs into
+Claude Code, Cursor, Codex, GitHub Copilot, Gemini CLI and the other agents
+that read the open skills format:
+
+```bash
+npx skills add bagowix/dishka-fastmcp
+```
+
+Agents that read documentation directly can use
+[llms.txt](https://bagowix.github.io/dishka-fastmcp/llms.txt) or
+[Context7](https://context7.com/bagowix/dishka-fastmcp).
 
 ## How it works
 
