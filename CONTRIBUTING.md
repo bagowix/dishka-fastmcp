@@ -20,6 +20,7 @@ uv run prek install  # one-time: installs the git hooks
 CI runs exactly these on Python 3.11–3.15. Run them locally before opening a PR:
 
 ```bash
+uv run zizmor .github/        # GitHub Actions audit (offline unless GH_TOKEN is set)
 uv run ruff format --check    # formatting
 uv run ruff check             # linting
 uv run mypy                   # type checking (strict)
