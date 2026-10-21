@@ -13,6 +13,7 @@ from dishka import (
     provide,
 )
 from fastmcp import FastMCP
+from fastmcp.tools import tool
 from mcp.types import TextContent
 
 from dishka_fastmcp import FromDishka, inject, setup_dishka
@@ -145,5 +146,50 @@ async def test_sync_tool_with_async_container_raises() -> None:
     try:
         with pytest.raises(Exception, match='needs a Container'):
             await mcp.call_tool('work')
+    finally:
+        await container.close()
+
+
+@pytest.mark.parametrize('decorator', ['tool', 'prompt', 'resource', 'standalone tool'])
+def test_inject_above_the_fastmcp_decorator_raises(decorator: str) -> None:
+    # A server decorator has registered the bare function by then: the
+    # dependency is in its schema, and the client fills it in.
+    mcp = FastMCP('test')
+    register = {
+        'tool': mcp.tool,
+        'prompt': mcp.prompt,
+        'resource': mcp.resource('data://{app}'),
+        'standalone tool': tool,
+    }[decorator]
+
+    async def handler(app: FromDishka[AppDep]) -> str:
+        return app
+
+    registered = register(handler)
+
+    with pytest.raises(DishkaFastMCPError, match=r'@inject must sit below'):
+        inject(registered)
+
+
+@pytest.mark.asyncio
+async def test_standalone_decorator_above_inject_registers_the_injected_function() -> None:
+    container = make_async_container(AppProvider())
+    mcp = FastMCP('test')
+    setup_dishka(container, mcp)
+
+    @tool
+    @inject
+    async def greet(name: str, app: FromDishka[AppDep]) -> str:
+        return f'{app}:{name}'
+
+    mcp.add_tool(greet)
+
+    try:
+        tools = await mcp.list_tools()
+        assert tools[0].parameters['properties'].keys() == {'name'}
+        result = await mcp.call_tool('greet', {'name': 'x'})
+        block = result.content[0]
+        assert isinstance(block, TextContent)
+        assert block.text == 'APP:x'
     finally:
         await container.close()
