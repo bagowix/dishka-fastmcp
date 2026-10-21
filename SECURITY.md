@@ -3,7 +3,7 @@
 ## Supported versions
 
 dishka-fastmcp follows semantic versioning. Security fixes target the latest
-released minor.
+released 3.x minor.
 
 | Version | Supported |
 | ------- | --------- |

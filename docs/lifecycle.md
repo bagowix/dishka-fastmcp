@@ -10,6 +10,7 @@ unless `DishkaMiddleware` opened one for the whole MCP request.
 | Scope | Boundary | Owner |
 |---|---|---|
 | `Scope.APP` | Server lifetime | Root container, closed by `dishka_lifespan` or by its owner |
+| `Scope.SESSION` | One MCP connection, with `DishkaMiddleware(session_scope=True)`; see [Session scope](#session-scope-for-the-mcp-connection) | `DishkaMiddleware`, finalized by the MCP SDK |
 | `Scope.REQUEST` | One tool call, resource read, or prompt render; with `DishkaMiddleware`, one MCP request | `@inject`, or `DishkaMiddleware` |
 
 Pass `dishka_lifespan` to the FastMCP server you run. By default it closes the
@@ -192,7 +193,9 @@ The rules that follow from it:
 - A router mounted into several servers uses the container of the server that
   serves the request, so one router module can back several applications.
 - A server without `dishka_lifespan` hands no container to its routers, even when
-  the same router is mounted into another server that has one. The container
+  the same router is mounted into another server that has one. Its
+  `DishkaMiddleware` is the exception: routers without a container of their own
+  share the request scope it opens with their async handlers. The container
   must also reach the serving server's lifespan state: `combine_lifespans` keeps
   it next to lifespans that yield a mapping or `None`, and a lifespan of your own
   that enters `dishka_lifespan` must pass its state through.
@@ -218,13 +221,13 @@ to open one scope for the whole MCP request, and reach it through
 ```python
 from collections.abc import Sequence
 
-from fastmcp.server.providers import Provider
+from fastmcp.server.providers import Provider as ComponentProvider
 from fastmcp.tools import Tool
 
 from dishka_fastmcp import DishkaFastMCPError, DishkaMiddleware, get_request_container
 
 
-class FeatureTools(Provider):
+class FeatureTools(ComponentProvider):
     async def _list_tools(self) -> Sequence[Tool]:
         try:
             container = get_request_container()
@@ -267,8 +270,8 @@ With it:
   factory parameters instead.
 - The middleware finalizes the scope after the handler has produced its result.
   A finalizer that raises therefore fails the whole request with a protocol
-  error, which FastMCP may mask as `Internal server error`; the server log has
-  the cause. Without the middleware the same error is raised inside the handler
+  error, which a 2026-07-28 client always sees as `Internal server error`; the
+  server log has the cause. Without the middleware the same error is raised inside the handler
   call and reaches the client as a tool error.
 - `get_request_container()` raises `DishkaFastMCPError` where the request has no
   scope. FastMCP lists component providers outside any request, for example on
@@ -298,7 +301,7 @@ With it:
   two containers.
 - The scope's `Context` and `FastMCP` describe the request as the middleware
   sees it: `FastMCP` is the server whose `DishkaMiddleware` opened the scope,
-  also for the handlers of mounted routers.
+  also for the handlers of mounted routers that share it.
 - A direct `await server.call_tool(...)` outside an MCP request gets no scope,
   and `@inject` opens one per handler. `task=True` handlers get none either:
   `get_request_container()` raises in the worker, and `@inject` keeps rejecting
@@ -314,6 +317,90 @@ class UserProvider(Provider):
         meta = ctx.request_context.meta if ctx.request_context else None
         return User((meta or {}).get('user', 'anonymous'))
 ```
+
+## Session scope for the MCP connection
+
+`Scope.SESSION` holds objects that belong to one client connection: a browser or
+shell the client drives over several calls, an upstream client, a per-client
+cache. Pass `session_scope=True` to `DishkaMiddleware`, and the REQUEST scope of
+every request is opened from the SESSION scope of its connection:
+
+```python
+class BrowserProvider(Provider):
+    @provide(scope=Scope.SESSION)
+    async def browser(self, pool: BrowserPool) -> AsyncIterator[Browser]:
+        browser = await pool.launch()
+        yield browser
+        await browser.close()
+
+
+mcp = FastMCP(
+    'app',
+    lifespan=dishka_lifespan(container),
+    middleware=[DishkaMiddleware(session_scope=True)],
+)
+```
+
+The scope follows the MCP connection, and how long a connection lives depends on
+the protocol era the client speaks and on the transport:
+
+| Connection | SESSION lifetime |
+|---|---|
+| 2025 handshake (`initialize`) over stdio, stateful Streamable HTTP, SSE, or an in-memory `Client(server, mode='legacy')` | The whole connection |
+| 2026-07-28 (`server/discover`), which FastMCP 4's `Client` picks by default on stdio, Streamable HTTP and in memory | One request |
+| Stateless Streamable HTTP (`stateless_http=True`), either era | One request |
+
+The 2026-07-28 protocol is stateless by design: the server builds a fresh
+connection for every request. A SESSION dependency then lives for one request,
+the way it does for an HTTP request in dishka's Starlette integration. Use the
+scope for resources worth reusing while a connection lasts. State that has to
+survive between 2026-07-28 calls belongs in FastMCP's
+[session state](https://gofastmcp.com/servers/sessions), keyed by a
+`session_id` argument or by the authenticated user.
+
+- The scope opens on the connection's first request and its concurrent requests
+  share it. Like the request scope it has a lock, with the same rule for
+  factories that resolve through their container from a task of their own.
+- `FastMCPProvider` provides `Context` and `FastMCP` at REQUEST scope, so a
+  SESSION factory cannot take them; dishka rejects such a graph when the
+  container is built. The factory runs inside the request that first resolves
+  it.
+- The scope closes when the connection does: the client disconnects (stdio EOF,
+  the end of an SSE stream or of an in-memory client block), a stateful HTTP
+  client sends `DELETE`, the HTTP session stays idle past its timeout, or the
+  server shuts down. On shutdown, sessions close before `dishka_lifespan`
+  closes the APP scope.
+- Set an idle timeout when SESSION runs over stateful HTTP. A client that
+  vanishes without `DELETE` keeps its session, and the SESSION dependencies in
+  it, until the timeout. FastMCP 4.0 sets no timeout, and FastMCP 4.1 takes the
+  SDK default: 1800 seconds from `mcp` 2.2, none before. Without a timeout
+  those dependencies stay until the server restarts. Pass
+  `mcp.http_app(session_idle_timeout=600)`, or set
+  `FASTMCP_HTTP_SESSION_IDLE_TIMEOUT=600` for `mcp.run(transport='http')`.
+  Every request pushes the deadline forward, and from `mcp` 2.2 so does an
+  open GET stream.
+- A 2026-07-28 connection closes its SESSION scope before the response goes
+  out, so a slow finalizer delays the response. A stateless HTTP request from a
+  2025 client closes it after the response.
+- The MCP SDK runs the SESSION finalizers. It logs their errors as
+  `connection exit_stack cleanup raised` on the `mcp.server.runner` logger
+  instead of raising them, and abandons finalizers still running after five
+  seconds. The client never sees them.
+- FastMCP's stdio client transports, `PythonStdioTransport` among them, keep the
+  server process, and with it the connection, alive after the
+  `async with Client(...)` block by default. Pass
+  `keep_alive=False` to close the session with the client.
+- Only `DishkaMiddleware` opens a SESSION scope. Without it, and for direct
+  `server.call_tool()` calls, `@inject` opens REQUEST straight from the root
+  container: dishka enters the skipped SESSION scope with each REQUEST scope and
+  closes it with that request. A mounted router set up with a container of its
+  own gets SESSION scopes of its own from its own
+  `DishkaMiddleware(session_scope=True)`, when no outer middleware opened the
+  request's scope; otherwise its handlers open REQUEST from its container.
+- The MCP SDK exposes the per-client connection only as the private
+  `ServerSession._connection`, which FastMCP itself reads for `PingMiddleware`
+  and `StatefulProxyClient`. dishka-fastmcp reads it in one place, only with
+  `session_scope=True`, and its tests fail on an upgrade that removes it.
 
 ## Sync request finalization
 
@@ -343,10 +430,12 @@ different workers and APP cleanup happens during server shutdown.
 
 ## Limitations
 
-`Scope.SESSION` is not supported because FastMCP does not provide a deterministic
-teardown boundary for a Dishka session container.
+`Scope.SESSION` spans more than one request only on 2025 handshake connections
+over stdio, stateful Streamable HTTP, SSE and the in-memory
+`Client(server, mode='legacy')`; see
+[Session scope](#session-scope-for-the-mcp-connection).
 
-Handlers registered with `task=True` are also unsupported. FastMCP 4 runs them
+Handlers registered with `task=True` are unsupported. FastMCP 4 runs them
 in a `fastmcp-tasks` worker, outside the request that queued them, and `@inject`
 raises `DishkaFastMCPError` there. Resolve dependencies during the request and
 pass plain values to background work.

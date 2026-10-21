@@ -22,6 +22,7 @@ from typing import Any, ParamSpec, TypeVar, cast, overload
 
 from dishka import Scope
 from dishka.integrations.base import wrap_injection
+from fastmcp.decorators import get_fastmcp_meta
 
 from dishka_fastmcp._container import (
     get_async_container,
@@ -235,6 +236,13 @@ def inject(func: Callable[P, T]) -> Callable[P, T]: ...
 
 def inject(func: Callable[P, Any]) -> Callable[P, Any]:
     """Inject ``FromDishka`` dependencies, auto-detecting sync vs async."""
+    if get_fastmcp_meta(func) is not None:
+        raise DishkaFastMCPError(
+            f'@inject must sit below the FastMCP decorator of {_callable_name(func)!r}. '
+            '@mcp.tool, @mcp.prompt and @mcp.resource register the function they '
+            'decorate, so FastMCP would serve it without injection and let the '
+            'client fill in its FromDishka parameters.',
+        )
     if iscoroutinefunction(func) or isasyncgenfunction(func):
         return inject_async(func)
     return inject_sync(func)

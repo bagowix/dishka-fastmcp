@@ -28,6 +28,10 @@ uv run pyright                # type checking (strict, second checker)
 uv run pytest --cov           # tests with coverage (threshold: 100%)
 ```
 
+CI also runs the suite against the minimum supported `dishka`, `fastmcp` and
+`mcp` versions. The pre-commit hooks lint Markdown with pymarkdown, which CI does
+not run, so run `uv run prek run --all-files` before pushing docs changes.
+
 Run a single test:
 
 ```bash
@@ -44,15 +48,20 @@ uv run pytest tests/test_tools.py::test_async_tool_injects_and_hides_deps_from_s
   `chore:`, `perf:`, `ci:` prefixes. Enforced by a `commit-msg` hook.
 - **Update the CHANGELOG.** User-facing changes update the `[Unreleased]` section
   of `CHANGELOG.md` in prose — explain what changed and why.
+- **Agent-facing docs follow the API.** A change to the public API or its rules
+  also updates `docs/llms.txt`, `skills/dishka-fastmcp/SKILL.md` and the `rules`
+  in `context7.json`.
 
 ## Scope
 
 dishka-fastmcp is deliberately focused: a thin, correct bridge between dishka
 and FastMCP's supported extension points together with Dishka's
 `wrap_injection`.
-It supports the scopes FastMCP can actually honor (`APP` and `REQUEST`) — see the
-README for why `SESSION` is omitted. For anything beyond a small fix, open an
-issue first so we can agree on the approach.
+It supports `APP` and `REQUEST`, and `SESSION` as an opt-in through
+`DishkaMiddleware(session_scope=True)`; see the
+[lifecycle guide](https://bagowix.github.io/dishka-fastmcp/lifecycle/#session-scope-for-the-mcp-connection).
+For anything beyond a small fix, open an issue first so we can agree on the
+approach.
 
 ## Code of conduct
 

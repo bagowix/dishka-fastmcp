@@ -4,7 +4,9 @@ import asyncio
 from typing import Any, Final
 
 from dishka import AsyncContainer, Scope
+from fastmcp.server.dependencies import FastMCPRequestContext
 from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
+from mcp.server.connection import Connection
 
 from dishka_fastmcp._container import (
     RequestScope,
@@ -24,6 +26,7 @@ _SYNC_CONTAINER: Final[str] = (
     'worker threads that must not share it. Use make_async_container(...), or '
     'leave the middleware out and keep the per-handler scope of @inject.'
 )
+_SESSION_KEY: Final[str] = 'dishka_fastmcp.session'
 
 
 class _TaskReentrantLock:
@@ -58,6 +61,33 @@ class _TaskReentrantLock:
             self._lock.release()
 
 
+def _connection(request: FastMCPRequestContext) -> Connection:
+    # The mcp SDK keeps the per-client Connection only on the private
+    # ServerSession._connection. FastMCP itself reads it there (PingMiddleware,
+    # StatefulProxyClient, Context.session_id); tests/test_session.py fails on a
+    # lock bump that drops it.
+    connection: Connection = request.session._connection  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+    return connection
+
+
+def _session_container(root: AsyncContainer, request: FastMCPRequestContext) -> AsyncContainer:
+    """Return the SESSION container of ``root`` for the connection serving ``request``.
+
+    Opened on the connection's first request and closed by the SDK when the
+    connection closes. Concurrent requests share it, hence the lock. Mounted
+    servers with containers of their own get sessions of their own.
+    """
+    connection = _connection(request)
+    sessions: dict[AsyncContainer, AsyncContainer] = connection.state.setdefault(_SESSION_KEY, {})
+    session = sessions.get(root)
+    if session is None:
+        # Entering a dishka scope does not await, so no other request can slip
+        # in between this lookup and the assignment.
+        session = sessions[root] = root(lock_factory=_TaskReentrantLock, scope=Scope.SESSION)
+        connection.exit_stack.push_async_callback(session.close)
+    return session
+
+
 class DishkaMiddleware(Middleware):
     """Open ``Scope.REQUEST`` around every MCP request the server handles.
 
@@ -78,7 +108,20 @@ class DishkaMiddleware(Middleware):
     A mounted server's ``DishkaMiddleware`` does nothing when its parent already
     opened a scope, and a direct ``server.call_tool()`` outside an MCP request
     gets no scope: ``@inject`` then opens one per handler.
+
+    With ``session_scope=True`` the REQUEST scope is opened from a
+    ``Scope.SESSION`` scope that lives as long as the MCP connection: opened on
+    its first request, shared by its concurrent requests, and finalized by the
+    MCP SDK when the connection closes. Only handshake-era (2025) connections
+    over stdio, stateful Streamable HTTP, SSE or an in-memory client outlive a
+    request. A 2026-07-28 connection and a stateless HTTP request live for one
+    request, and so does their SESSION scope. The SDK logs and swallows
+    errors from SESSION finalizers and gives them five seconds.
     """
+
+    def __init__(self, *, session_scope: bool = False) -> None:
+        """Open REQUEST scopes from a SESSION scope per MCP connection if ``session_scope``."""
+        self._session_scope = session_scope
 
     async def on_request(
         self,
@@ -92,7 +135,8 @@ class DishkaMiddleware(Middleware):
         root = require_container()
         if not isinstance(root, AsyncContainer):
             raise DishkaFastMCPError(_SYNC_CONTAINER)
-        async with root(
+        parent = _session_container(root, request) if self._session_scope else root
+        async with parent(
             provide_context((), {}),
             lock_factory=_TaskReentrantLock,
             scope=Scope.REQUEST,

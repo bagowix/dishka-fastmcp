@@ -6,6 +6,57 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `DishkaMiddleware(session_scope=True)` keeps one `Scope.SESSION` per MCP
+  connection. Until now dishka entered the skipped SESSION scope with every
+  REQUEST scope and closed it with the request, so a SESSION dependency (an
+  upstream client, a browser the client drives over several calls) was rebuilt
+  on every call. Earlier releases left SESSION out because FastMCP has no
+  session-teardown hook; the MCP SDK 2 gives each connection an exit stack that
+  it unwinds when the connection closes, and that is the hook. The SESSION
+  scope opens on the connection's first request, its concurrent requests share
+  it, and the SDK finalizes it when the connection closes: stdio EOF, an HTTP
+  `DELETE` or idle timeout, the end of an in-memory client, or server shutdown,
+  before `dishka_lifespan` closes the APP scope. The SDK logs finalizer errors
+  on the `mcp.server.runner` logger instead of raising them and gives the
+  finalizers five seconds.
+
+  The scope follows the connection, and only 2025 handshake connections over
+  stdio, stateful Streamable HTTP, SSE and an in-memory
+  `Client(server, mode='legacy')` outlive a request. The 2026-07-28 protocol,
+  which FastMCP 4's `Client` speaks by default, and stateless HTTP build a
+  fresh connection per request, so a SESSION dependency lives one request
+  there. Keep state that later calls need in FastMCP's session state. Without
+  the flag nothing changes.
+
+  Over stateful HTTP, set `session_idle_timeout`. FastMCP 4.0, and FastMCP 4.1
+  with `mcp` 2.0 or 2.1, set no idle timeout, so the SESSION dependencies of a
+  client that disappears without `DELETE` stay until the server restarts.
+
+  The request context FastMCP receives from the SDK reaches the connection only
+  through the private `ServerSession._connection`, the attribute FastMCP's
+  `PingMiddleware` and `StatefulProxyClient` read too. The middleware reads it
+  only with `session_scope=True`, and the test suite fails on an upgrade that
+  removes it.
+
+### Changed
+
+- The package declares `mcp>=2.0.0,<3`, which FastMCP 4 already installs.
+  `DishkaMiddleware(session_scope=True)` relies on the MCP SDK's connection
+  object, so the range it is tested against is now explicit, and CI tests the
+  `mcp==2.0.0` floor.
+- `@inject` above a FastMCP decorator raises `DishkaFastMCPError` at import.
+  `@mcp.tool` and `@mcp.prompt` register the bare function, so when a
+  dependency type is one pydantic can validate (a `NewType` of `str`, a
+  dataclass, a model), nothing failed before: the parameter showed up in the
+  schema, and the client supplied the "injected" value itself, a current user
+  or a token included. `@mcp.resource` did the same with a `FromDishka`
+  parameter that shares its name with a URI template slot. Move `@inject` below
+  the FastMCP decorator. Above a standalone `@tool` registered later with
+  `mcp.add_tool()`, `@inject` used to work; it raises now as well, because both
+  decorators leave the same marker. Put `@tool` above `@inject` there too.
+
 ## [3.2.0] - 2026-10-16
 
 ### Added

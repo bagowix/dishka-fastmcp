@@ -12,14 +12,16 @@ and not coupling to either library's internals is high.
 - Never break existing functionality while making a change.
 - A solution must be simple, reliable and readable without extra explanation.
 - Build on public extension points, not private internals of dishka or FastMCP.
+  The one exception is the MCP SDK's `ServerSession._connection` (see Scopes).
 - Write code, docstrings and docs in English.
 
 ## Technology
 
 - **Python 3.11+** — the minimum supported version; CI runs 3.11–3.15.
-- **dishka** (`>=1.10.1`) and **FastMCP** (`>=4.0.0,<5`) — the two runtime
-  dependencies; these floors are verified by the `deps-min` CI job.
-  FastMCP moves fast; the `deps-min` CI job guards the declared lower bounds.
+- **dishka** (`>=1.10.1`), **FastMCP** (`>=4.0.0,<5`) and the MCP SDK **mcp**
+  (`>=2.0.0,<3`, imported directly by `middleware.py`) — the three runtime
+  dependencies. FastMCP moves fast; the `deps-min` CI job pins all three floors
+  (`mcp==2.0.0` with `mcp-types==2.0.0`) and runs the suite on them.
 - **uv** — package manager. **hatchling** — build backend; the version is
   **static** in `dishka_fastmcp/version.py` (`[tool.hatch.version] path`), bumped
   manually on release and exposed as `dishka_fastmcp.__version__`.
@@ -33,8 +35,9 @@ Registration and execution are separate concerns.
 
 - **Registration:** `@inject` goes *below* the FastMCP decorator. `wrap_injection`
   (dishka's public helper) strips `FromDishka` params from `__signature__`, so it
-  must run before `@mcp.tool` builds the JSON schema. Wrong order leaks a service
-  into the schema.
+  must run before `@mcp.tool` builds the JSON schema. The other order raises
+  `DishkaFastMCPError` at import: `inject` finds FastMCP's `__fastmcp__` marker
+  on a function the decorator has already registered bare.
 - **Setup:** `setup_dishka(container, app)` stores the root container on the
   FastMCP application itself, so the two share one lifetime and are collected
   together. `dishka_lifespan(container)` closes it on shutdown and drops the
@@ -85,9 +88,16 @@ Registration and execution are separate concerns.
   `fastmcp-tasks` worker outside the request. The worker is detected by looking up
   `fastmcp_tasks.context` in `sys.modules`; never import `fastmcp_tasks` for it —
   the extension is optional and its package registers a client extension on import.
-- **Scopes:** `APP` (server lifetime) and `REQUEST` (one operation). `SESSION` is
-  deliberately unsupported — FastMCP has no session-teardown hook, so it could not
-  be finalized deterministically.
+- **Scopes:** `APP` (server lifetime), `REQUEST` (one operation), and opt-in
+  `SESSION` (one MCP connection, `DishkaMiddleware(session_scope=True)`). SESSION
+  containers live in the SDK `Connection.state`, one per root container (mounted
+  servers with containers of their own get their own), and close through
+  `Connection.exit_stack`, which the SDK unwinds when the connection closes. The
+  request context FastMCP receives reaches the `Connection` only through the
+  private `ServerSession._connection` (FastMCP reads it the same way); keep that
+  access in `middleware._connection`.
+  2026-07-28 and stateless HTTP connections live one request, and so does
+  SESSION there: it follows the connection by design, never fake it with a cache.
 
 ## Conventions
 
@@ -110,5 +120,7 @@ uv sync                       # create venv, install dev deps
 uv run pytest --cov           # tests + coverage (100%)
 uv run ruff format --check && uv run ruff check
 uv run mypy && uv run pyright
+uv run zizmor .github/        # workflow audit (offline without GH_TOKEN)
 uv run prek install           # one-time: git hooks
+uv run prek run --all-files   # every hook, incl. pymarkdown (not run in CI)
 ```

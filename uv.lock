@@ -579,6 +579,7 @@ source = { editable = "." }
 dependencies = [
     { name = "dishka" },
     { name = "fastmcp" },
+    { name = "mcp" },
 ]
 
 [package.dev-dependencies]
@@ -599,6 +600,7 @@ dev = [
 requires-dist = [
     { name = "dishka", specifier = ">=1.10.1" },
     { name = "fastmcp", specifier = ">=4.0.0,<5" },
+    { name = "mcp", specifier = ">=2.0.0,<3" },
 ]
 
 [package.metadata.requires-dev]

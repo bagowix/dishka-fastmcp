@@ -5,10 +5,10 @@
   "excludeFolders": ["tests"],
   "rules": [
     "Install dishka-fastmcp and import dishka_fastmcp; it is a different package from fastmcp-dishka (import fastmcp_dishka).",
-    "Put @inject below @mcp.tool, @mcp.resource or @mcp.prompt, so FromDishka parameters stay out of the tool schema.",
+    "Put @inject below @mcp.tool, @mcp.resource or @mcp.prompt, so FromDishka parameters stay out of the tool schema; the other order raises DishkaFastMCPError at import.",
     "Async handlers need make_async_container; sync handlers need make_container. One server's injected handlers share one kind.",
     "Pass dishka_lifespan(container) to FastMCP(lifespan=...) and call setup_dishka(container, mcp) once per server that owns a container.",
-    "Use Scope.APP and Scope.REQUEST only; Scope.SESSION is not supported.",
+    "Scope.SESSION needs DishkaMiddleware(session_scope=True) and spans requests only on 2025 handshake connections; 2026-07-28 and stateless HTTP connections live one request. Over stateful HTTP set session_idle_timeout, or abandoned sessions keep SESSION dependencies until restart.",
     "When the container is shared with FastAPI or FastStream, list the MCP lifespan first in combine_lifespans or pass finalize_container=False.",
     "Return completed values from handlers; task=True handlers cannot use FromDishka.",
     "For REQUEST dependencies outside handlers, add DishkaMiddleware() first and resolve with await get_request_container().get(T)."

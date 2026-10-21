@@ -9,6 +9,7 @@
 - [ ] `uv run ruff format --check` and `uv run ruff check` pass
 - [ ] `uv run mypy` and `uv run pyright` pass
 - [ ] `CHANGELOG.md` `[Unreleased]` updated
+- [ ] Public API or rule changes also update `docs/llms.txt`, `skills/dishka-fastmcp/SKILL.md` and `context7.json`
 - [ ] Commits follow Conventional Commits
 
 ## Related issues

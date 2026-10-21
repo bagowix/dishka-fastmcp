@@ -77,6 +77,7 @@ piped_lifespan: Lifespan = database | dishka_lifespan(async_container)
 
 # DishkaMiddleware is a FastMCP middleware, and the request container it opens is async.
 request_middleware: Middleware = DishkaMiddleware()
+session_middleware: Middleware = DishkaMiddleware(session_scope=True)
 middleware_server: FastMCP[Any] = FastMCP('middleware', middleware=[DishkaMiddleware()])
 
 

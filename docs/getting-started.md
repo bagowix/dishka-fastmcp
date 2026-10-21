@@ -20,8 +20,8 @@
     poetry add dishka-fastmcp
     ```
 
-The package requires Python 3.11+, Dishka 1.10.1+, and FastMCP 4.0.0 through
-the latest 4.x release.
+The package requires Python 3.11+, Dishka 1.10.1+, FastMCP 4.0.0 through the
+latest 4.x release, and the MCP SDK (`mcp`) 2.x, which FastMCP installs.
 
 ## Configure the server
 
@@ -61,6 +61,9 @@ async def get_price(item: str, catalog: FromDishka[Catalog]) -> int:
 
     Put `@inject` below `@mcp.tool`, `@mcp.resource`, or `@mcp.prompt`. FastMCP
     must inspect the signature after Dishka parameters have been removed.
+    `@inject` above a FastMCP decorator fails at import: FastMCP has registered
+    the bare function by then, and the client would fill in the dependency
+    itself.
 
 ## Resources and prompts
 
