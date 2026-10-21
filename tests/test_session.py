@@ -37,8 +37,12 @@ class Upstream:
 class Call:
     """A REQUEST-scoped object built on the session's Upstream."""
 
+    # A finalized Call can be freed and its id() reused by the next one.
+    _numbers = count(1)
+
     def __init__(self, upstream: Upstream) -> None:
         self.upstream = upstream
+        self.number = next(Call._numbers)
 
 
 class SessionProvider(Provider):
@@ -90,7 +94,7 @@ def served(provider: SessionProvider, *, session_scope: bool = True) -> FastMCP:
     @server.tool
     @inject
     async def which(call: FromDishka[Call]) -> str:
-        return f'{call.upstream.number}:{id(call)}'
+        return f'{call.upstream.number}:{call.number}'
 
     return server
 
