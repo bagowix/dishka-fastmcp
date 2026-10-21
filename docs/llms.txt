@@ -6,15 +6,16 @@
 > container with the rest of the application.
 
 Install: `uv add dishka-fastmcp` (or `pip install dishka-fastmcp`). Requires
-Python 3.11+, `dishka>=1.10.1`, `fastmcp>=4.0.0,<5`.
+Python 3.11+, `dishka>=1.10.1`, `fastmcp>=4.0.0,<5`, `mcp>=2.0.0,<3`.
 
 ## Rules that matter
 
 - **Put `@inject` BELOW the FastMCP decorator** (`@mcp.tool` / `@mcp.resource` /
   `@mcp.prompt`). `@inject` rewrites the signature to strip `FromDishka`
   parameters; FastMCP then builds the JSON schema from the cleaned signature, so
-  injected services never appear as tool arguments. Wrong order leaks the service
-  into the schema.
+  injected services never appear as tool arguments. `@inject` above a FastMCP
+  decorator fails at import with `DishkaFastMCPError`: FastMCP would otherwise
+  serve the bare function and let the client fill in the service.
 - **Call `setup_dishka(container, mcp)` once** before running the server.
 - **Routers need no setup of their own.** Routers mounted into a server whose
   lifespan includes `dishka_lifespan(container)` use that container during the
@@ -30,9 +31,22 @@ Python 3.11+, `dishka>=1.10.1`, `fastmcp>=4.0.0,<5`.
   `make_container`** (regular sync handlers run in a FastMCP worker thread).
   Mixing the two raises `DishkaFastMCPError`.
 - **Scopes: `Scope.APP`** (server lifetime) and **`Scope.REQUEST`** (one tool
-  call / resource read / prompt render, finalized when it ends). `Scope.SESSION`
-  is intentionally unsupported: FastMCP has no session-teardown hook, so a
-  session-lifetime scope cannot be finalized deterministically.
+  call / resource read / prompt render, finalized when it ends).
+  **`Scope.SESSION`** (one MCP connection) is opt-in through
+  `DishkaMiddleware(session_scope=True)` and finalized by the MCP SDK when the
+  connection closes. It spans several requests only on 2025 handshake
+  connections (stdio, stateful Streamable HTTP, SSE, in-memory
+  `Client(server, mode='legacy')`). The 2026-07-28 protocol, the default of
+  FastMCP 4's `Client`, and stateless HTTP get a fresh connection per request,
+  so SESSION lives one request there; keep cross-call state in FastMCP's
+  session state (`session_id: SessionId`, `UserSession`). Over stateful HTTP
+  set `mcp.http_app(session_idle_timeout=...)` (or
+  `FASTMCP_HTTP_SESSION_IDLE_TIMEOUT`): FastMCP 4.0, and 4.1 with `mcp` < 2.2,
+  have no idle timeout, so a client gone without `DELETE` keeps its SESSION
+  dependencies until restart. Without the
+  middleware, dishka skips SESSION and closes it with each REQUEST. A SESSION
+  factory cannot take `Context` or `FastMCP`: `FastMCPProvider` supplies them at
+  REQUEST scope, and dishka rejects the graph when the container is built.
 - **Close the root container on shutdown** to finalize `Scope.APP` providers:
   pass `dishka_lifespan(container)` to `FastMCP(lifespan=...)`. Compose this
   helper with an existing lifespan so shutdown also removes the container's
@@ -79,15 +93,16 @@ Python 3.11+, `dishka>=1.10.1`, `fastmcp>=4.0.0,<5`.
   closes it (async or sync) on shutdown; `finalize_container=False` leaves
   closing to the container's owner. Compose it with `combine_lifespans`, or with
   `|` when the other lifespan is a FastMCP `@lifespan` function.
-- `DishkaMiddleware()` — FastMCP middleware that opens one REQUEST scope per MCP
-  request (list requests included) and shares it with async `@inject` handlers.
-  Put it first; it needs an `AsyncContainer`.
+- `DishkaMiddleware(*, session_scope=False)` — FastMCP middleware that opens one
+  REQUEST scope per MCP request (list requests included) and shares it with
+  async `@inject` handlers. With `session_scope=True` that scope is opened from
+  a SESSION scope per MCP connection. Put it first; it needs an `AsyncContainer`.
 - `get_request_container()` — the REQUEST `AsyncContainer` of the current MCP
   request, shared with async `@inject` handlers; raises `DishkaFastMCPError`
   outside the middleware's scope.
 - `DishkaFastMCPError` — raised on integration misuse: a missing or wrong-kind
-  container, a different container already registered for the app, a returned
-  awaitable or generator, injection inside a `task=True` worker,
+  container, a different container already registered for the app, `@inject`
+  placed above a FastMCP decorator, a returned awaitable or generator, injection inside a `task=True` worker,
   `get_request_container()` outside a request scope, or `DishkaMiddleware` with
   a sync container.
 

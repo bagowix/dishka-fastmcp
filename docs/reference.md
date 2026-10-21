@@ -24,6 +24,12 @@ manages one `Scope.REQUEST` around the handler. Sync and async functions are
 detected automatically. Under `DishkaMiddleware`, async handlers share the scope
 the middleware opened instead.
 
+Put `@inject` below the FastMCP decorator (`@mcp.tool`, `@mcp.resource`,
+`@mcp.prompt`, or a standalone one such as `@tool`). Applied to a function a
+FastMCP decorator has already processed, it raises `DishkaFastMCPError` at
+import: FastMCP would serve the bare function and let the client fill in the
+`FromDishka` parameters.
+
 FastMCP tools may be sync or async generator functions. Their REQUEST scope
 stays open for the whole iteration. Resources and prompts must use their normal
 FastMCP return types.
@@ -32,15 +38,15 @@ An ordinary `def` or `async def` must return its completed value directly.
 Returning an awaitable, generator, or async generator would defer work until
 after the function returns, when its REQUEST scope may already be finalized, so
 `@inject` raises
-`DishkaFastMCPError`. Coroutine-like objects are closed during rejection;
-returned `asyncio.Task` instances are cancelled and awaited before the scope is
-finalized.
+`DishkaFastMCPError`. Coroutine-like objects are closed during rejection; an
+`asyncio.Task` returned by an async handler is cancelled and awaited before the
+scope is finalized.
 
 ## `dishka_lifespan`
 
 ```python
 dishka_lifespan(
-    container,
+    container: AsyncContainer | Container,
     *,
     finalize_container: bool = True,
 ) -> fastmcp.server.lifespan.Lifespan
@@ -66,6 +72,7 @@ shutdown. See
 
 ```python
 FastMCP('app', middleware=[DishkaMiddleware(), ...])
+DishkaMiddleware(*, session_scope: bool = False)
 ```
 
 A FastMCP middleware that opens `Scope.REQUEST` around every MCP request,
@@ -74,6 +81,12 @@ it once before the response goes out. Async `@inject` handlers share the scope.
 Put it first in the middleware list. It finds the root container as `@inject`
 does, and the container must be an `AsyncContainer`. See
 [Request scope for the whole MCP request](lifecycle.md#request-scope-for-the-whole-mcp-request).
+
+With `session_scope=True` it opens the REQUEST scope from a `Scope.SESSION`
+scope per MCP connection, which the MCP SDK finalizes when the connection
+closes. A 2026-07-28 connection and a stateless HTTP request live one request,
+and so does their SESSION scope. See
+[Session scope for the MCP connection](lifecycle.md#session-scope-for-the-mcp-connection).
 
 ## `get_request_container`
 
@@ -90,7 +103,8 @@ mounted server set up with a container of its own.
 ## `FastMCPProvider`
 
 A Dishka provider for the current `fastmcp.Context` and `fastmcp.FastMCP`
-objects. Add an instance when constructing the container. Operation arguments
+objects, both at `Scope.REQUEST`. Add an instance when constructing the
+container. Operation arguments
 remain regular tool, resource, or prompt parameters.
 
 ## `FromDishka`
@@ -102,7 +116,11 @@ import their entire integration surface from one package.
 
 Raised for integration misuse: a missing container registration, a container
 type that does not match the handler's sync or async execution model, a
-different container registered for the same application, a deferred result
-returned by an ordinary handler, injection inside a `task=True` background
-worker, `get_request_container()` outside a request scope, or
-`DishkaMiddleware` with a sync container.
+different container registered for the same application, `@inject` applied
+above a FastMCP decorator, a deferred result returned by an ordinary handler,
+injection inside a `task=True` background worker, `get_request_container()`
+outside a request scope, or `DishkaMiddleware` with a sync container.
+
+## `__version__`
+
+The installed package version, as a string.

@@ -60,10 +60,10 @@ Agents that read documentation directly can use
 |---|---|
 | Python | 3.11-3.15 |
 | Dishka | 1.10.1 and newer |
-| FastMCP | 4.0.0 through 4.x |
+| FastMCP | 4.0.0 through 4.x, with `mcp` 2.x |
 | Handlers | Tools, resources, and prompts |
 | Execution | Async and sync handlers |
-| Scopes | `APP` and `REQUEST` |
+| Scopes | `APP`, `REQUEST`, and opt-in `SESSION` per MCP connection |
 
 [Get started](getting-started.md){ .md-button .md-button--primary }
 [Ask Context7](https://context7.com/bagowix/dishka-fastmcp){ .md-button }

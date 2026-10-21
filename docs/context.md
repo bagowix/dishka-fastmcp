@@ -43,24 +43,37 @@ described in [Mounted servers](lifecycle.md#mounted-servers).
 Under `DishkaMiddleware` the REQUEST scope is opened once per MCP request, so its
 `Context` and `FastMCP` describe the request as the middleware sees it:
 `FastMCP` is the server whose `DishkaMiddleware` opened the scope, also for the
-handlers of mounted routers. See
+handlers of mounted routers that share it. A mounted router set up with a
+container of its own opens its own scope, and `FastMCP` there is that router. See
 [Request scope for the whole MCP request](lifecycle.md#request-scope-for-the-whole-mcp-request).
 
 ## Using context in providers
 
-Dependencies can consume the same context without coupling the handler to the
-FastMCP decorator:
+Dependencies can consume the same context, so the handler needs no `Context`
+parameter:
 
 ```python
-from dishka import Provider, Scope, provide
+from typing import NewType
+
+from dishka import Provider, Scope, make_async_container, provide
 from fastmcp import Context
+
+from dishka_fastmcp import FastMCPProvider
+
+RequestId = NewType('RequestId', str)
 
 
 class RequestProvider(Provider):
     @provide(scope=Scope.REQUEST)
-    def request_id(self, context: Context) -> str:
-        return context.request_id
+    def request_id(self, context: Context) -> RequestId:
+        return RequestId(context.request_id)
+
+
+container = make_async_container(FastMCPProvider(), RequestProvider())
 ```
+
+`Context` and `FastMCP` live in `Scope.REQUEST`, so only REQUEST factories can
+take them.
 
 ## Operation arguments
 

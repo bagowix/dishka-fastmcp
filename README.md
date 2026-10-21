@@ -5,8 +5,8 @@
 [![PyPI](https://img.shields.io/pypi/v/dishka-fastmcp.svg)](https://pypi.org/project/dishka-fastmcp/)
 [![Downloads](https://img.shields.io/pypi/dm/dishka-fastmcp.svg)](https://pypi.org/project/dishka-fastmcp/)
 [![Python versions](https://img.shields.io/pypi/pyversions/dishka-fastmcp.svg)](https://pypi.org/project/dishka-fastmcp/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![llms.txt](https://img.shields.io/badge/-llms.txt-brightgreen)](docs/llms.txt)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/bagowix/dishka-fastmcp/blob/main/LICENSE)
+[![llms.txt](https://img.shields.io/badge/-llms.txt-brightgreen)](https://bagowix.github.io/dishka-fastmcp/llms.txt)
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-2f6f55.svg)](https://bagowix.github.io/dishka-fastmcp/)
 [![Context7](https://img.shields.io/badge/docs-Context7-1f6feb.svg)](https://context7.com/bagowix/dishka-fastmcp)
 [![skills.sh](https://skills.sh/b/bagowix/dishka-fastmcp)](https://skills.sh/bagowix/dishka-fastmcp)
@@ -59,8 +59,8 @@ time and never appears in the schema.
 uv add dishka-fastmcp        # or: pip install dishka-fastmcp
 ```
 
-Requires Python 3.11+, `dishka>=1.10.1`, `fastmcp>=4.0.0,<5`. Servers still on
-FastMCP 3.x should stay on dishka-fastmcp 2.0.x.
+Requires Python 3.11+, `dishka>=1.10.1`, `fastmcp>=4.0.0,<5` and `mcp>=2.0.0,<3`.
+Servers still on FastMCP 3.x should stay on dishka-fastmcp 2.0.x.
 
 ## With a coding agent
 
@@ -87,7 +87,9 @@ Registration time and execution time are separate concerns:
   schema from the function signature. `@inject` rewrites that signature first,
   stripping every `FromDishka` parameter, so the schema the LLM sees contains
   only the real client-facing arguments. **Order matters** — `@inject` must be
-  the inner decorator.
+  the inner decorator. Placed above, it fails at import: FastMCP has
+  registered the bare function by then, and the client would fill in the
+  dependency itself.
 - **`setup_dishka` associates the root container with the FastMCP application.**
   `@inject` selects that container from the application handling the current
   operation, then opens and finalizes `Scope.REQUEST` around the handler, or
@@ -108,12 +110,16 @@ Registration time and execution time are separate concerns:
 
 | Scope | Boundary | Lifetime |
 |-------|----------|----------|
-| `Scope.APP` | The whole server | Owned by the root container; **you** close it on shutdown (see below) |
+| `Scope.APP` | The whole server | Owned by the root container; `dishka_lifespan` closes it on shutdown, or its owner does (see below) |
+| `Scope.SESSION` | One MCP connection | Opt-in: opened by `DishkaMiddleware(session_scope=True)`, finalized when the connection closes |
 | `Scope.REQUEST` | One tool call / resource read / prompt render | Opened and finalized by `@inject` around the handler, or by `DishkaMiddleware` around the whole MCP request |
 
-`Scope.SESSION` is **intentionally not supported.** FastMCP does not provide a
-deterministic teardown boundary for a Dishka session container. Without that
-boundary, session-scoped resources could not be finalized reliably.
+`Scope.SESSION` follows the MCP connection, so it spans several requests only
+where a connection does: 2025 handshake clients over stdio, stateful Streamable
+HTTP, SSE or an in-memory `Client(server, mode='legacy')`. The 2026-07-28 protocol, which FastMCP 4's own
+`Client` speaks by default, and stateless HTTP build a fresh connection for every
+request, and there a SESSION dependency lives for one request. See
+[Session scope](https://bagowix.github.io/dishka-fastmcp/lifecycle/#session-scope-for-the-mcp-connection).
 
 ### Closing the container
 
@@ -258,25 +264,17 @@ your MCP server). Reach for dishka-fastmcp when your MCP server is part of a
 larger dishka application, or when your dependencies own resources that must be
 set up and torn down per request.
 
-### Relationship to [`fastmcp-dishka`](https://github.com/vfaddey/fastmcp-dishka)
+### `fastmcp-dishka`
 
-`fastmcp-dishka` (Apache-2.0) is an earlier independent implementation of the
-same core use case. This package uses a different lifecycle model:
-
-- **Scope ownership.** `@inject` opens and closes the request scope where the
-  handler runs, including FastMCP's sync worker thread. Thread-affine `REQUEST`
-  dependencies are therefore created and finalized on the same thread. The
-  opt-in `DishkaMiddleware` opens one scope for the whole MCP request instead,
-  and sync handlers keep their own.
-- **Supported boundaries.** `APP` and `REQUEST` are supported. `SESSION` is not
-  exposed because FastMCP does not provide a deterministic session teardown
-  boundary. Background-task handlers are rejected because they outlive the
-  originating request.
-- **Container lookup.** The active container is associated with its owning
-  FastMCP application and resolved through FastMCP's public operation context.
-  Routers mounted into a served server take its container from the lifespan
-  state FastMCP hands to each request.
+[`fastmcp-dishka`](https://github.com/vfaddey/fastmcp-dishka) is an earlier,
+independent package with a similar name and the same goal. The two are not
+interchangeable: install one, and import `dishka_fastmcp` for this one. When
+moving over, add `dishka_lifespan(container)` to the server and check its
+`Scope.SESSION` providers: here a SESSION dependency is rebuilt for every request
+unless you add
+[`DishkaMiddleware(session_scope=True)`](https://bagowix.github.io/dishka-fastmcp/lifecycle/#session-scope-for-the-mcp-connection),
+and even then it spans requests only on 2025 handshake connections.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](https://github.com/bagowix/dishka-fastmcp/blob/main/LICENSE).
