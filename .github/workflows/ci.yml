@@ -77,11 +77,13 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
 
-      - name: Pin dishka and fastmcp to minimum supported versions
+      - name: Pin dishka, fastmcp and mcp to minimum supported versions
         run: >-
           uv pip install
           'dishka==1.10.1'
           'fastmcp[tasks]==4.0.0'
+          'mcp==2.0.0'
+          'mcp-types==2.0.0'
 
       - name: Tests against minimum versions
         run: uv run --no-sync pytest

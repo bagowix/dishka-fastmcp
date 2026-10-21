@@ -29,6 +29,7 @@ classifiers = [
 dependencies = [
     "dishka>=1.10.1",
     "fastmcp>=4.0.0,<5",
+    "mcp>=2.0.0,<3",
 ]
 
 [project.urls]
