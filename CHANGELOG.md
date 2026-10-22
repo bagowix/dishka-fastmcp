@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.3.1] - 2026-10-22
+
 ### Fixed
 
 - On Python 3.14 and later, a decorator built on plain `functools.wraps` above
@@ -297,7 +299,8 @@ prompts.
 - Handlers registered with FastMCP's `task=True` are not supported: they run after
   the request has finished, so no container is in scope for them.
 
-[Unreleased]: https://github.com/bagowix/dishka-fastmcp/compare/v3.3.0...HEAD
+[Unreleased]: https://github.com/bagowix/dishka-fastmcp/compare/v3.3.1...HEAD
+[3.3.1]: https://github.com/bagowix/dishka-fastmcp/compare/v3.3.0...v3.3.1
 [3.3.0]: https://github.com/bagowix/dishka-fastmcp/compare/v3.2.0...v3.3.0
 [3.2.0]: https://github.com/bagowix/dishka-fastmcp/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/bagowix/dishka-fastmcp/compare/v3.0.0...v3.1.0

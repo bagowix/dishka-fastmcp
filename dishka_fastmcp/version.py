@@ -7,7 +7,7 @@ and read at build time by hatchling (see ``[tool.hatch.version]`` in
 
 __all__ = ('VERSION',)
 
-VERSION = '3.3.0'
+VERSION = '3.3.1'
 """The installed version of dishka-fastmcp.
 
 Guaranteed to comply with PEP 440 version specifiers.
