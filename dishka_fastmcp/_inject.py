@@ -6,6 +6,7 @@ strips ``FromDishka`` parameters from ``__signature__``, so it has to run first;
 """
 
 import asyncio
+import sys
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import aclosing, suppress
 from functools import WRAPPER_ASSIGNMENTS, wraps
@@ -38,9 +39,10 @@ __all__ = ('inject',)
 P = ParamSpec('P')
 T = TypeVar('T')
 
-# wrap_injection sets the cleaned ``__annotations__`` directly, and since Python
-# 3.14 ``wraps`` copies ``__annotate__`` instead, which would drop them.
-_INJECTED_ASSIGNMENTS = (*WRAPPER_ASSIGNMENTS, '__annotations__')
+# A decorator below @inject may assign ``__annotations__`` directly, which sets
+# ``__annotate__`` to ``None``. Since Python 3.14 ``wraps`` copies only
+# ``__annotate__``, and ``guarded`` would show wrap_injection no dependencies.
+_ASSIGNED_WITH_ANNOTATIONS = (*WRAPPER_ASSIGNMENTS, '__annotations__')
 
 
 def _close_coroutine_like(value: object) -> None:
@@ -60,6 +62,28 @@ def _close_async_generator_from_sync(generator: AsyncGenerator[Any, Any]) -> Non
     closer = generator.aclose()
     with suppress(StopIteration):
         closer.send(None)
+
+
+def _keep_annotations(func: Callable[P, T]) -> Callable[P, T]:
+    """Let ``functools.wraps`` copy the cleaned annotations of an injected ``func``.
+
+    ``wrap_injection`` assigns ``__annotations__``, which sets ``__annotate__`` to
+    ``None``. Since Python 3.14 ``wraps`` copies ``__annotate__`` instead, so a plain
+    ``wraps`` decorator above ``@inject`` would end up with no annotations.
+    """
+    if sys.version_info >= (3, 14):  # pragma: no cover - dead before 3.14, tested on 3.14+
+        from annotationlib import Format  # noqa: PLC0415 - new in Python 3.14
+
+        annotations = func.__annotations__
+
+        def annotate(format: Format) -> dict[str, Any]:  # noqa: A002 - PEP 649 name
+            # annotationlib derives FORWARDREF and STRING from VALUE.
+            if format != Format.VALUE:
+                raise NotImplementedError
+            return dict(annotations)
+
+        func.__annotate__ = annotate
+    return func
 
 
 def _callable_name(func: object) -> str:
@@ -83,6 +107,7 @@ def _wrap_async(func: Callable[P, T]) -> tuple[Callable[P, T], Callable[P, T]] |
     )
     if scoped is func:
         return None
+    _keep_annotations(scoped)
     shared = wrap_injection(
         func=func,
         container_getter=get_shared_container,
@@ -100,7 +125,7 @@ def _inject_async_generator(
         return func
     scoped, shared = wrappers
 
-    @wraps(scoped, assigned=_INJECTED_ASSIGNMENTS)
+    @wraps(scoped)
     async def handler(*args: P.args, **kwargs: P.kwargs) -> AsyncGenerator[T, None]:
         injected = scoped if shared_request_container() is None else shared
         # Closing this generator early must close the injected one at once: that
@@ -130,7 +155,7 @@ def inject_async(
         generator_func = cast('Callable[P, AsyncGenerator[T, None]]', func)
         return cast('Callable[P, Awaitable[T]]', _inject_async_generator(generator_func))
 
-    @wraps(func)
+    @wraps(func, assigned=_ASSIGNED_WITH_ANNOTATIONS)
     async def guarded(*args: P.args, **kwargs: P.kwargs) -> T:
         result = await func(*args, **kwargs)
         if isawaitable(result):
@@ -161,7 +186,7 @@ def inject_async(
         return func
     scoped, shared = wrappers
 
-    @wraps(scoped, assigned=_INJECTED_ASSIGNMENTS)
+    @wraps(scoped)
     async def handler(*args: P.args, **kwargs: P.kwargs) -> T:
         injected = scoped if shared_request_container() is None else shared
         return await injected(*args, **kwargs)
@@ -180,7 +205,7 @@ def inject_sync(func: Callable[P, T]) -> Callable[P, T]:
     """
     if isgeneratorfunction(func):
         generator_func = cast('Callable[P, T]', func)
-        return wrap_injection(
+        injected = wrap_injection(
             func=generator_func,
             container_getter=get_sync_container,
             is_async=False,
@@ -189,8 +214,9 @@ def inject_sync(func: Callable[P, T]) -> Callable[P, T]:
             scope=Scope.REQUEST,
             provide_context=provide_context,
         )
+        return injected if injected is generator_func else _keep_annotations(injected)
 
-    @wraps(func)
+    @wraps(func, assigned=_ASSIGNED_WITH_ANNOTATIONS)
     def guarded(*args: P.args, **kwargs: P.kwargs) -> T:
         result = func(*args, **kwargs)
         if isawaitable(result):
@@ -223,7 +249,7 @@ def inject_sync(func: Callable[P, T]) -> Callable[P, T]:
     )
     if wrapped is guarded:  # no FromDishka parameters — nothing to inject or guard
         return func
-    return wrapped
+    return _keep_annotations(wrapped)
 
 
 @overload

@@ -1,8 +1,10 @@
 """Dependency injection into MCP tools."""
 
+import functools
+import inspect
 import threading
-from collections.abc import Iterator
-from typing import NewType
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
+from typing import NewType, ParamSpec, TypeVar, get_type_hints
 
 import pytest
 from dishka import (
@@ -12,7 +14,7 @@ from dishka import (
     make_container,
     provide,
 )
-from fastmcp import FastMCP
+from fastmcp import Client, FastMCP
 from fastmcp.tools import tool
 from mcp.types import TextContent
 
@@ -22,6 +24,9 @@ from dishka_fastmcp.exceptions import DishkaFastMCPError
 
 AppDep = NewType('AppDep', str)
 ReqDep = NewType('ReqDep', str)
+
+P = ParamSpec('P')
+T = TypeVar('T')
 
 
 class AppProvider(Provider):
@@ -193,3 +198,81 @@ async def test_standalone_decorator_above_inject_registers_the_injected_function
         assert block.text == 'APP:x'
     finally:
         await container.close()
+
+
+def map_errors(func: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
+    # A typical user decorator above @inject: error mapping, metrics, retries.
+    @functools.wraps(func)
+    async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+        return await func(*args, **kwargs)
+
+    return wrapper
+
+
+@pytest.mark.asyncio
+async def test_plain_wraps_decorator_above_inject_registers_and_runs() -> None:
+    # Since Python 3.14 wraps copies __annotate__ instead of __annotations__, and
+    # FastMCP failed to build this schema with KeyError: 'name'.
+    container = make_async_container(AppProvider())
+    mcp = FastMCP('test')
+    setup_dishka(container, mcp)
+
+    @mcp.tool
+    @map_errors
+    @inject
+    async def greet(name: str, app: FromDishka[AppDep]) -> str:
+        return f'{app}:{name}'
+
+    try:
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+            assert tools[0].input_schema['properties'].keys() == {'name'}
+            result = await client.call_tool('greet', {'name': 'x'})
+        block = result.content[0]
+        assert isinstance(block, TextContent)
+        assert block.text == 'APP:x'
+    finally:
+        await container.close()
+
+
+@pytest.mark.parametrize('kind', ['async', 'sync', 'async generator', 'generator'])
+def test_plain_wraps_above_inject_keeps_the_cleaned_annotations(kind: str) -> None:
+    async def async_handler(name: str, app: FromDishka[AppDep]) -> str:
+        return f'{app}:{name}'
+
+    def sync_handler(name: str, app: FromDishka[AppDep]) -> str:
+        return f'{app}:{name}'
+
+    async def async_stream(name: str, app: FromDishka[AppDep]) -> AsyncIterator[str]:
+        yield f'{app}:{name}'
+
+    def stream(name: str, app: FromDishka[AppDep]) -> Iterator[str]:
+        yield f'{app}:{name}'
+
+    handler = {
+        'async': async_handler,
+        'sync': sync_handler,
+        'async generator': async_stream,
+        'generator': stream,
+    }[kind]
+    outer = functools.wraps(inject(handler))(lambda: None)
+
+    expected = get_type_hints(handler)
+    del expected['app']
+    assert get_type_hints(outer) == expected
+
+
+@pytest.mark.parametrize('kind', ['async', 'sync'])
+def test_inject_reads_annotations_a_decorator_below_assigned_directly(kind: str) -> None:
+    # Assigning __annotations__ sets __annotate__ to None, as dishka's own
+    # wrap_injection does, and since Python 3.14 wraps copies only __annotate__.
+    async def async_handler(name: str, app: FromDishka[AppDep]) -> str:
+        return f'{app}:{name}'
+
+    def sync_handler(name: str, app: FromDishka[AppDep]) -> str:
+        return f'{app}:{name}'
+
+    handler = {'async': async_handler, 'sync': sync_handler}[kind]
+    handler.__annotations__ = dict(handler.__annotations__)
+
+    assert inspect.signature(inject(handler)).parameters.keys() == {'name'}
