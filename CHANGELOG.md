@@ -6,6 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- On Python 3.14 and later, a decorator built on plain `functools.wraps` above
+  `@inject` lost the handler's annotations, and FastMCP failed to register the
+  tool with a `KeyError` from pydantic's schema builder. dishka's
+  `wrap_injection` assigns the cleaned `__annotations__`, which leaves
+  `__annotate__` set to `None`, and since 3.14 `wraps` copies `__annotate__`
+  instead of `__annotations__`. The function `@inject` returns now carries an
+  `__annotate__` that yields the cleaned annotations, so error-mapping, metrics
+  and retry decorators above it keep them. With 3.3.0 and earlier, pass
+  `assigned=(*functools.WRAPPER_ASSIGNMENTS, '__annotations__')` to
+  `functools.wraps` in such a decorator.
+- On Python 3.14 and later, `@inject` silently skipped an `async def` or plain
+  `def` handler whose `__annotations__` a decorator below it had assigned
+  directly, the way dishka's own `wrap_injection` does. Its `FromDishka`
+  parameters stayed in the tool schema for the client to fill in. `@inject`
+  now reads those annotations; generator handlers were not affected.
+
 ## [3.3.0] - 2026-10-21
 
 ### Added
